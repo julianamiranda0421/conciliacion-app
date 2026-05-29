@@ -1,8 +1,11 @@
 export function Topbar() {
   return (
     <header className="flex h-16 items-center justify-between border-b border-line bg-white px-6 lg:px-8">
-      <div className="text-sm text-ink-soft">
+      <div className="flex items-center gap-2 text-sm text-ink-soft">
         Conciliación Bancaria 360
+        <span className="rounded-full bg-primary-light px-2 py-0.5 text-[11px] font-medium text-primary">
+          v1
+        </span>
       </div>
       <div className="flex items-center gap-3">
         <div className="text-right text-xs leading-tight">
