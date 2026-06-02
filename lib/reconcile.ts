@@ -345,42 +345,31 @@ export function reconcileAch(
       });
       return;
     }
-    for (const f of g.facturas) {
-      conciliado.push({
-        transactionId: f.transactionId,
-        billIdTxn: f.billId,
-        billIdBanco: dep.billId,
-        valorBanco: f.amount,
-        valorAplicado: f.amount,
-        diferencia: 0,
-        biaCreditos: f.biaCreditsUsed,
-        totalFactura: f.amount + f.biaCreditsUsed,
-        fechaBanco: dep.fecha,
-        fechaPago: f.paymentDate,
-        sucursal: dep.cliente,
-        tipo: "ACH",
-        nivelMatch: "ALTO",
-      });
-    }
-    // Sobrepago (banco > aplicado) o pago parcial (banco < aplicado)
+    const filas: Conciliado[] = g.facturas.map((f) => ({
+      transactionId: f.transactionId,
+      billIdTxn: f.billId,
+      billIdBanco: dep.billId,
+      valorBanco: f.amount,
+      valorAplicado: f.amount,
+      diferencia: 0,
+      biaCreditos: f.biaCreditsUsed,
+      totalFactura: f.amount + f.biaCreditsUsed,
+      fechaBanco: dep.fecha,
+      fechaPago: f.paymentDate,
+      sucursal: dep.cliente,
+      tipo: "ACH",
+      nivelMatch: "ALTO",
+    }));
+    // Sobrepago (banco > aplicado) o pago parcial (banco < aplicado): la
+    // diferencia queda EN la misma línea de la factura. El valor del banco de
+    // esa factura refleja lo que realmente entró (incluye el excedente).
     const saldo = dep.valor - g.suma;
-    if (Math.abs(saldo) > ACH_TOL) {
-      conciliado.push({
-        transactionId: 0,
-        billIdTxn: saldo > 0 ? "Saldo a favor (abono próx. factura)" : "Faltante (pago parcial)",
-        billIdBanco: dep.billId,
-        valorBanco: saldo,
-        valorAplicado: 0,
-        diferencia: saldo,
-        biaCreditos: 0,
-        totalFactura: 0,
-        fechaBanco: dep.fecha,
-        fechaPago: "",
-        sucursal: dep.cliente,
-        tipo: saldo > 0 ? "SOBREPAGO" : "PARCIAL",
-        nivelMatch: "MEDIO",
-      });
+    if (Math.abs(saldo) > ACH_TOL && filas.length) {
+      const last = filas[filas.length - 1];
+      last.valorBanco += saldo;
+      last.diferencia = saldo;
     }
+    conciliado.push(...filas);
   });
 
   const movimientos: Movimiento[] = banco.map((m) => ({
