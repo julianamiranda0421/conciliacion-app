@@ -136,7 +136,7 @@ export async function saveCrossings(
   await sb.from("crossings").delete().eq("period", period).eq("account_id", accountId);
   await insertChunked(
     "crossings",
-    conciliado.map((c) => ({
+    conciliado.filter((c) => c.transactionId > 0).map((c) => ({
       period,
       account_id: accountId,
       transaction_id: c.transactionId,

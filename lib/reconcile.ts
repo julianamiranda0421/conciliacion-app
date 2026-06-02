@@ -265,6 +265,9 @@ const ACH_CONFIG: Record<string, AchConfig> = {
 // Tolerancia (pesos) para absorber redondeo de centavos del banco al cruzar
 // la suma de un grupo con el valor del depósito.
 const ACH_TOL = 1;
+// Margen máximo (fracción del depósito) para emparejar cuando hay sobrepago o
+// pago parcial. La diferencia se reporta como saldo a favor / faltante.
+const ACH_MAX_PCT = 0.05;
 
 export function reconcileAch(
   banco: BankMovement[],
@@ -285,29 +288,52 @@ export function reconcileAch(
     arr.push(t);
     grupos.set(t.s3PathDocument, arr);
   }
+  const gruposArr = [...grupos.entries()].map(([s3, facturas]) => ({
+    s3,
+    facturas,
+    suma: facturas.reduce((s, f) => s + f.amount, 0),
+  }));
   const usados = new Set<string>();
+  const asignado: (typeof gruposArr[number] | null)[] = depositos.map(() => null);
+
+  const cercano = (valor: number) => {
+    let best: (typeof gruposArr[number]) | null = null;
+    let bestDiff = Infinity;
+    for (const g of gruposArr) {
+      if (usados.has(g.s3)) continue;
+      const diff = Math.abs(g.suma - valor);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = g;
+      }
+    }
+    return { best, bestDiff };
+  };
+
+  // Pase 1: coincidencia exacta (± centavos)
+  depositos.forEach((dep, i) => {
+    const { best, bestDiff } = cercano(dep.valor);
+    if (best && bestDiff <= ACH_TOL) {
+      asignado[i] = best;
+      usados.add(best.s3);
+    }
+  });
+  // Pase 2: más cercana dentro de un margen -> sobrepago / pago parcial
+  depositos.forEach((dep, i) => {
+    if (asignado[i]) return;
+    const { best, bestDiff } = cercano(dep.valor);
+    if (best && bestDiff <= dep.valor * ACH_MAX_PCT) {
+      asignado[i] = best;
+      usados.add(best.s3);
+    }
+  });
 
   const conciliado: Conciliado[] = [];
   const bancoSinTxn: BancoSinTxn[] = [];
 
-  for (const dep of depositos) {
-    // Buscar el grupo cuya suma de Amount sea la más cercana al depósito
-    // (dentro de la tolerancia de centavos).
-    let matchKey: string | null = null;
-    let bestDiff = Infinity;
-    for (const [s3, facturas] of grupos) {
-      if (usados.has(s3)) continue;
-      const suma = facturas.reduce((s, f) => s + f.amount, 0);
-      const diff = Math.abs(suma - dep.valor);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        matchKey = s3;
-      }
-    }
-    if (!matchKey || bestDiff > ACH_TOL) {
-      matchKey = null;
-    }
-    if (!matchKey) {
+  depositos.forEach((dep, i) => {
+    const g = asignado[i];
+    if (!g) {
       bancoSinTxn.push({
         fechaBanco: dep.fecha,
         descripcion: dep.descripcion,
@@ -317,10 +343,9 @@ export function reconcileAch(
         valorBanco: dep.valor,
         nota: "Abono ACH en banco sin aplicación que cuadre en transactions",
       });
-      continue;
+      return;
     }
-    usados.add(matchKey);
-    for (const f of grupos.get(matchKey)!) {
+    for (const f of g.facturas) {
       conciliado.push({
         transactionId: f.transactionId,
         billIdTxn: f.billId,
@@ -337,7 +362,26 @@ export function reconcileAch(
         nivelMatch: "ALTO",
       });
     }
-  }
+    // Sobrepago (banco > aplicado) o pago parcial (banco < aplicado)
+    const saldo = dep.valor - g.suma;
+    if (Math.abs(saldo) > ACH_TOL) {
+      conciliado.push({
+        transactionId: 0,
+        billIdTxn: saldo > 0 ? "Saldo a favor (abono próx. factura)" : "Faltante (pago parcial)",
+        billIdBanco: dep.billId,
+        valorBanco: saldo,
+        valorAplicado: 0,
+        diferencia: saldo,
+        biaCreditos: 0,
+        totalFactura: 0,
+        fechaBanco: dep.fecha,
+        fechaPago: "",
+        sucursal: dep.cliente,
+        tipo: saldo > 0 ? "SOBREPAGO" : "PARCIAL",
+        nivelMatch: "MEDIO",
+      });
+    }
+  });
 
   const movimientos: Movimiento[] = banco.map((m) => ({
     fecha: m.fecha,
