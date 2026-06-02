@@ -78,6 +78,7 @@ export type ReconResult = {
     nDev: number;
     nCritico: number;
     descuadre: number;
+    diferenciaValor: number;
   };
 };
 
@@ -224,6 +225,7 @@ export function reconcile(
       nDev: devAnalisis.length,
       nCritico: devAnalisis.filter((d) => d.riesgo.startsWith("CRITICO")).length,
       descuadre: conciliado.filter((c) => c.diferencia !== 0).length,
+      diferenciaValor: conciliado.reduce((s, c) => s + Math.abs(c.diferencia), 0),
     },
   };
 }
@@ -399,6 +401,7 @@ export function reconcileAch(
       nDev: 0,
       nCritico: 0,
       descuadre: conciliado.filter((c) => c.diferencia !== 0).length,
+      diferenciaValor: conciliado.reduce((s, c) => s + Math.abs(c.diferencia), 0),
     },
   };
 }

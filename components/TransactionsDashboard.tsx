@@ -24,6 +24,7 @@ export type TxnKpis = {
   biaCreditos: number;
   nCruzados: number;
   diferenciaCount: number;
+  diferenciaValor: number;
   porCuenta: { cuenta: string; count: number; valor: number }[];
 };
 
@@ -79,7 +80,7 @@ export function TransactionsDashboard({
         <Kpi label="Valor recaudado en banco" value={money(kpis.valorRecaudadoBanco)} sub={`${kpis.nCruzados} cruzados`} cls="text-success" />
         <Kpi label="Valor cruzado (transactions)" value={money(kpis.valorCruzado)} sub={`${pct}% del total`} bar={pct} />
         <Kpi label="Bia créditos usados" value={money(kpis.biaCreditos)} sub="aplicados con bonos" cls="text-primary" />
-        <Kpi label="Diferencias" value={String(kpis.diferenciaCount)} sub="casos banco ≠ aplicado" cls={kpis.diferenciaCount ? "text-error" : "text-success"} />
+        <Kpi label="Diferencias" value={money(kpis.diferenciaValor)} sub={`${kpis.diferenciaCount} caso(s) banco ≠ aplicado`} cls={kpis.diferenciaCount ? "text-error" : "text-success"} />
       </div>
 
       {/* Por cuenta de cruce */}

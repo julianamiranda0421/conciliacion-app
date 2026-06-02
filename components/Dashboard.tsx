@@ -136,7 +136,7 @@ export function Dashboard({ result }: { result: ReconResult }) {
     { cls: "warn", lbl: "En Banco, sin transaction ID", val: money(k.totalBst), sub: `${k.nBst} mov` },
     { cls: "warn", lbl: "En transactions, sin mov Bancario", val: money(k.totalTsb), sub: `${k.nTsb} mov` },
     { cls: k.nCritico ? "bad" : "warn", lbl: "Cheques devueltos", val: String(k.nDev), sub: `${k.nCritico} críticos` },
-    { cls: k.descuadre ? "bad" : "ok", lbl: "Diferencia", val: String(k.descuadre), sub: "casos con diferencia" },
+    { cls: k.descuadre ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` },
   ];
 
   const valClass = (cls: string) =>

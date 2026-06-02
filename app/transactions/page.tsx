@@ -69,6 +69,7 @@ export default async function TransactionsPage({
     biaCreditos: rows.reduce((s, r) => s + r.biaCreditos, 0),
     nCruzados: rows.filter((r) => r.cuentaCruce !== "Sin cruzar").length,
     diferenciaCount: crossings.filter((c) => Number(c.diferencia) !== 0).length,
+    diferenciaValor: crossings.reduce((s, c) => s + Math.abs(Number(c.diferencia)), 0),
     porCuenta: [...porCuentaMap.entries()]
       .map(([cuenta, v]) => ({ cuenta, ...v }))
       .sort((a, b) => b.valor - a.valor),
