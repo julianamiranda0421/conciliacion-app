@@ -70,15 +70,15 @@ export function TransactionsDashboard({
 
   const pageRows = filtered.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.ceil(filtered.length / PAGE);
-  const pct = kpis.totalAplicado > 0 ? Math.round((kpis.valorCruzado / kpis.totalAplicado) * 100) : 0;
+  const difBancoVsCruzado = kpis.valorRecaudadoBanco - kpis.valorCruzado;
 
   return (
     <div>
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Kpi label="Cantidad de pagos" value={kpis.cantidadPagos.toLocaleString("es-CO")} sub={money(kpis.totalAplicado) + " aplicado"} />
-        <Kpi label="Valor recaudado en banco" value={money(kpis.valorRecaudadoBanco)} sub={`${kpis.nCruzados} cruzados`} cls="text-success" />
-        <Kpi label="Valor cruzado (transactions)" value={money(kpis.valorCruzado)} sub={`${pct}% del total`} bar={pct} />
+        <Kpi label="Pagos en la base" value={kpis.cantidadPagos.toLocaleString("es-CO")} sub={`${money(kpis.totalAplicado)} · todas las formas de pago`} />
+        <Kpi label="Recaudado en banco (cruzado)" value={money(kpis.valorRecaudadoBanco)} sub={`${kpis.nCruzados} pagos cruzados con bancos`} cls="text-success" />
+        <Kpi label="Aplicado a facturas (cruzado)" value={money(kpis.valorCruzado)} sub={`dif. vs banco: ${money(difBancoVsCruzado)}`} cls={difBancoVsCruzado !== 0 ? "text-error" : "text-success"} />
         <Kpi label="Bia créditos usados" value={money(kpis.biaCreditos)} sub="aplicados con bonos" cls="text-primary" />
         <Kpi label="Diferencias" value={money(kpis.diferenciaValor)} sub={`${kpis.diferenciaCount} caso(s) banco ≠ aplicado`} cls={kpis.diferenciaCount ? "text-error" : "text-success"} />
       </div>
