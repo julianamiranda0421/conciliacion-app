@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { parseBankPdf } from "@/lib/parseBank";
+import { parseBankDavivienda } from "@/lib/parseBankDavivienda";
 import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
-import { reconcile } from "@/lib/reconcile";
+import { reconcileForAccount } from "@/lib/reconcile";
+import { getAccount } from "@/lib/banks";
 import {
   getTransactions,
   saveBankMovements,
@@ -13,7 +15,7 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function toTxnRow(r: TxnDbRow): TxnRow {
+export function toTxnRow(r: TxnDbRow): TxnRow {
   return {
     transactionId: r.transaction_id,
     billId: r.bill_id ?? "",
@@ -23,6 +25,8 @@ function toTxnRow(r: TxnDbRow): TxnRow {
     status: r.status ?? "",
     paymentDate: r.payment_date ?? "",
     collectionType: r.collection_type ?? "",
+    biaCreditsUsed: Number(r.bia_credits_used) || 0,
+    s3PathDocument: r.s3_path_document ?? "",
   };
 }
 
@@ -57,19 +61,31 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Parsear el extracto del banco (PDF; Excel pendiente de muestra)
+    // 2) Parsear el extracto del banco según el formato de la cuenta
+    const account = getAccount(accountId);
     const name = bankFile.name.toLowerCase();
     const buf = new Uint8Array(await bankFile.arrayBuffer());
-    if (!name.endsWith(".pdf")) {
-      return NextResponse.json(
-        { error: "Por ahora esta cuenta procesa el extracto en PDF. El soporte de Excel se habilitará pronto." },
-        { status: 400 },
-      );
+    let banco;
+    if (account?.format === "excel") {
+      if (!/\.xlsx?$/.test(name)) {
+        return NextResponse.json(
+          { error: "Esta cuenta espera el extracto en Excel (.xlsx)." },
+          { status: 400 },
+        );
+      }
+      banco = parseBankDavivienda(buf);
+    } else {
+      if (!name.endsWith(".pdf")) {
+        return NextResponse.json(
+          { error: "Esta cuenta espera el extracto en PDF." },
+          { status: 400 },
+        );
+      }
+      banco = await parseBankPdf(buf);
     }
-    const banco = await parseBankPdf(buf);
 
     // 3) Conciliar y persistir
-    const result = reconcile(banco, txns, periodo);
+    const result = reconcileForAccount(accountId, banco, txns, periodo);
     await saveBankMovements(periodo, accountId, banco);
     await saveCrossings(periodo, accountId, result.conciliado);
     await recordLoad(periodo, accountId, {

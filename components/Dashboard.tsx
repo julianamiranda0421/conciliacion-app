@@ -31,6 +31,8 @@ const TABS: TabDef[] = [
       { key: "valorBanco", label: "Valor banco", num: true },
       { key: "valorAplicado", label: "Valor aplicado", num: true },
       { key: "diferencia", label: "Diferencia", num: true },
+      { key: "biaCreditos", label: "Bia créditos", num: true },
+      { key: "totalFactura", label: "Total factura", num: true },
       { key: "fechaBanco", label: "Fecha banco" },
       { key: "fechaPago", label: "Fecha pago" },
       { key: "sucursal", label: "Punto" },

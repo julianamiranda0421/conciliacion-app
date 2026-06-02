@@ -13,6 +13,8 @@ export type TxnRow = {
   status: string;
   paymentDate: string; // YYYY-MM-DD
   collectionType: string;
+  biaCreditsUsed: number;
+  s3PathDocument: string; // link del comprobante = aplicación manual si no está vacío
 };
 
 // Forma reducida que consume el motor de conciliación.
@@ -22,6 +24,8 @@ export type Transaction = {
   amount: number;
   paymentDate: string;
   collectionType: string;
+  biaCreditsUsed: number;
+  s3PathDocument: string;
 };
 
 type Row = Record<string, unknown>;
@@ -50,21 +54,25 @@ export function parseTransactionsAll(data: Uint8Array): TxnRow[] {
       status: String(r["Status"] ?? ""),
       paymentDate: toDateStr(r["Payment Date"]),
       collectionType: String(r["Collection Type"] ?? ""),
+      biaCreditsUsed: Number(r["Bia Credits Used"]) || 0,
+      s3PathDocument: String(r["S3 Path Document"] ?? "").trim(),
     });
   }
   return out;
 }
 
+const map = (r: TxnRow): Transaction => ({
+  transactionId: r.transactionId,
+  billId: r.billId,
+  amount: r.amount,
+  paymentDate: r.paymentDate,
+  collectionType: r.collectionType,
+  biaCreditsUsed: r.biaCreditsUsed,
+  s3PathDocument: r.s3PathDocument,
+});
+
 // Filtro de transactions que entran a cada cuenta bancaria.
 export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction[] {
-  const map = (r: TxnRow): Transaction => ({
-    transactionId: r.transactionId,
-    billId: r.billId,
-    amount: r.amount,
-    paymentDate: r.paymentDate,
-    collectionType: r.collectionType,
-  });
-
   switch (accountId) {
     case "bancolombia-8465":
       // Recaudo físico Bancolombia (efectivo + cheque)
@@ -75,6 +83,9 @@ export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction
             r.paymentMethodType === "PHYSICAL",
         )
         .map(map);
+    case "davivienda-5571":
+      // Pagos manuales (tienen comprobante S3); se agrupan por S3 en el motor.
+      return rows.filter((r) => r.s3PathDocument !== "").map(map);
     default:
       return [];
   }

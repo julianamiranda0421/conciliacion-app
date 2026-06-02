@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
-import { reconcile } from "@/lib/reconcile";
+import { reconcileForAccount } from "@/lib/reconcile";
 import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
 
@@ -86,9 +86,11 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
         status: r.status ?? "",
         paymentDate: r.payment_date ?? "",
         collectionType: r.collection_type ?? "",
+        biaCreditsUsed: Number(r.bia_credits_used) || 0,
+        s3PathDocument: r.s3_path_document ?? "",
       }),
     ),
   );
-  const result = reconcile(banco, txns, period);
+  const result = reconcileForAccount(accountId, banco, txns, period);
   return <Dashboard result={result} />;
 }

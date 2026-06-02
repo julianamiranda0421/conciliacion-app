@@ -30,6 +30,8 @@ export async function saveTransactions(period: string, rows: TxnRow[]) {
       status: r.status,
       payment_date: r.paymentDate || null,
       collection_type: r.collectionType,
+      bia_credits_used: r.biaCreditsUsed,
+      s3_path_document: r.s3PathDocument,
     })),
   );
 }
@@ -43,6 +45,8 @@ export type TxnDbRow = {
   status: string;
   payment_date: string | null;
   collection_type: string;
+  bia_credits_used: number | null;
+  s3_path_document: string | null;
 };
 
 export async function getTransactions(period: string): Promise<TxnDbRow[]> {
@@ -53,7 +57,7 @@ export async function getTransactions(period: string): Promise<TxnDbRow[]> {
     const { data, error } = await sb
       .from("transactions")
       .select(
-        "transaction_id,bill_id,amount,payment_method_type,payment_method_name,status,payment_date,collection_type",
+        "transaction_id,bill_id,amount,payment_method_type,payment_method_name,status,payment_date,collection_type,bia_credits_used,s3_path_document",
       )
       .eq("period", period)
       .range(from, from + size - 1);

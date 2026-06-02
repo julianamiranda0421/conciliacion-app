@@ -17,10 +17,12 @@ export type Conciliado = {
   valorBanco: number;
   valorAplicado: number;
   diferencia: number;
+  biaCreditos: number;
+  totalFactura: number;
   fechaBanco: string;
   fechaPago: string;
   sucursal: string;
-  tipo: "EFECTIVO" | "CHEQUE";
+  tipo: string;
   nivelMatch: "ALTO" | "MEDIO";
 };
 
@@ -149,6 +151,8 @@ export function reconcile(
       valorBanco: elegido.valor,
       valorAplicado: t.amount,
       diferencia: t.amount - elegido.valor,
+      biaCreditos: t.biaCreditsUsed,
+      totalFactura: t.amount + t.biaCreditsUsed,
       fechaBanco: elegido.fecha,
       fechaPago: t.paymentDate,
       sucursal: elegido.sucursal,
@@ -222,4 +226,126 @@ export function reconcile(
       descuadre: conciliado.filter((c) => c.diferencia !== 0).length,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Estrategia "1 a muchos" (Davivienda 5571): un Abono ACH ↔ varias facturas
+// agrupadas por S3 Path Document. El cruce es por VALOR (suma del grupo ==
+// valor del depósito). El banco recibe el Amount; los Bia créditos completan
+// la factura (factura = Amount + Bia créditos usados).
+// ---------------------------------------------------------------------------
+const DAVI_CLIENTES = [
+  { nit: "900403787", nombre: "PLASTICOS MONACO" },
+  { nit: "860502509", nombre: "PVC GERFOR SAS" },
+];
+
+export function reconcileAch(
+  banco: BankMovement[],
+  txns: Transaction[],
+  periodo: string,
+): ReconResult {
+  // Depósitos ACH relevantes (solo los 2 clientes)
+  const depositos = banco
+    .filter((m) => DAVI_CLIENTES.some((c) => m.descripcion.includes(c.nit)))
+    .map((m) => {
+      const cli = DAVI_CLIENTES.find((c) => m.descripcion.includes(c.nit));
+      return { ...m, cliente: cli?.nombre ?? m.descripcion };
+    });
+
+  // Agrupar pagos manuales por S3 Path Document
+  const grupos = new Map<string, Transaction[]>();
+  for (const t of txns) {
+    if (!t.s3PathDocument) continue;
+    const arr = grupos.get(t.s3PathDocument) ?? [];
+    arr.push(t);
+    grupos.set(t.s3PathDocument, arr);
+  }
+  const usados = new Set<string>();
+
+  const conciliado: Conciliado[] = [];
+  const bancoSinTxn: BancoSinTxn[] = [];
+
+  for (const dep of depositos) {
+    // Buscar el grupo cuya suma de Amount == valor del depósito
+    let matchKey: string | null = null;
+    for (const [s3, facturas] of grupos) {
+      if (usados.has(s3)) continue;
+      const suma = facturas.reduce((s, f) => s + f.amount, 0);
+      if (Math.abs(suma - dep.valor) < 1) {
+        matchKey = s3;
+        break;
+      }
+    }
+    if (!matchKey) {
+      bancoSinTxn.push({
+        fechaBanco: dep.fecha,
+        descripcion: dep.descripcion,
+        sucursal: dep.cliente,
+        billId: dep.billId,
+        documento: dep.documento,
+        valorBanco: dep.valor,
+        nota: "Abono ACH en banco sin aplicación que cuadre en transactions",
+      });
+      continue;
+    }
+    usados.add(matchKey);
+    for (const f of grupos.get(matchKey)!) {
+      conciliado.push({
+        transactionId: f.transactionId,
+        billIdTxn: f.billId,
+        billIdBanco: dep.billId,
+        valorBanco: f.amount,
+        valorAplicado: f.amount,
+        diferencia: 0,
+        biaCreditos: f.biaCreditsUsed,
+        totalFactura: f.amount + f.biaCreditsUsed,
+        fechaBanco: dep.fecha,
+        fechaPago: f.paymentDate,
+        sucursal: dep.cliente,
+        tipo: "ACH",
+        nivelMatch: "ALTO",
+      });
+    }
+  }
+
+  const movimientos: Movimiento[] = banco.map((m) => ({
+    fecha: m.fecha,
+    descripcion: m.descripcion,
+    sucursal: m.sucursal,
+    valor: m.valor,
+  }));
+
+  const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
+  const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
+
+  return {
+    conciliado,
+    bancoSinTxn,
+    txnSinBanco: [],
+    movimientos,
+    dev: [],
+    resumen: {
+      periodo,
+      nConc: conciliado.length,
+      totalConc,
+      nBst: bancoSinTxn.length,
+      totalBst,
+      nTsb: 0,
+      totalTsb: 0,
+      nDev: 0,
+      nCritico: 0,
+      descuadre: conciliado.filter((c) => c.diferencia !== 0).length,
+    },
+  };
+}
+
+// Dispatcher por cuenta
+export function reconcileForAccount(
+  accountId: string,
+  banco: BankMovement[],
+  txns: Transaction[],
+  periodo: string,
+): ReconResult {
+  if (accountId === "davivienda-5571") return reconcileAch(banco, txns, periodo);
+  return reconcile(banco, txns, periodo);
 }
