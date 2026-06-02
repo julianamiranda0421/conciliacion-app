@@ -239,18 +239,35 @@ const DAVI_CLIENTES = [
   { nit: "860502509", nombre: "PVC GERFOR SAS" },
 ];
 
+// Configuración del recaudo ACH por cuenta: cómo identificar el depósito
+// relevante en el extracto y qué etiqueta mostrar.
+export type AchConfig = {
+  matchDeposit: (descripcion: string) => boolean;
+  clienteLabel: (m: BankMovement) => string;
+};
+
+const ACH_CONFIG: Record<string, AchConfig> = {
+  "davivienda-5571": {
+    matchDeposit: (d) => DAVI_CLIENTES.some((c) => d.includes(c.nit)),
+    clienteLabel: (m) =>
+      DAVI_CLIENTES.find((c) => m.descripcion.includes(c.nit))?.nombre ?? m.descripcion,
+  },
+  "bancolombia-1800": {
+    matchDeposit: (d) => d.includes("RECAUDO DOMICILIACION ACH"),
+    clienteLabel: (m) => m.sucursal || "DOMICILIACION ACH",
+  },
+};
+
 export function reconcileAch(
   banco: BankMovement[],
   txns: Transaction[],
   periodo: string,
+  config: AchConfig,
 ): ReconResult {
-  // Depósitos ACH relevantes (solo los 2 clientes)
+  // Depósitos ACH relevantes para esta cuenta
   const depositos = banco
-    .filter((m) => DAVI_CLIENTES.some((c) => m.descripcion.includes(c.nit)))
-    .map((m) => {
-      const cli = DAVI_CLIENTES.find((c) => m.descripcion.includes(c.nit));
-      return { ...m, cliente: cli?.nombre ?? m.descripcion };
-    });
+    .filter((m) => config.matchDeposit(m.descripcion))
+    .map((m) => ({ ...m, cliente: config.clienteLabel(m) }));
 
   // Agrupar pagos manuales por S3 Path Document
   const grupos = new Map<string, Transaction[]>();
@@ -346,6 +363,7 @@ export function reconcileForAccount(
   txns: Transaction[],
   periodo: string,
 ): ReconResult {
-  if (accountId === "davivienda-5571") return reconcileAch(banco, txns, periodo);
+  const ach = ACH_CONFIG[accountId];
+  if (ach) return reconcileAch(banco, txns, periodo, ach);
   return reconcile(banco, txns, periodo);
 }

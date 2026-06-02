@@ -37,10 +37,10 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     id: "bancolombia-1800",
     bank: "Bancolombia",
     accountNumber: "1800",
-    alias: "Bancolombia 1800",
-    type: "general",
+    alias: "Bancolombia 1800 · Recaudo domiciliación ACH",
+    type: "recaudo",
     format: "pdf",
-    enabled: false,
+    enabled: true,
   },
   {
     id: "bancolombia-1144",

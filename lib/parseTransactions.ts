@@ -84,6 +84,7 @@ export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction
         )
         .map(map);
     case "davivienda-5571":
+    case "bancolombia-1800":
       // Pagos manuales (tienen comprobante S3); se agrupan por S3 en el motor.
       return rows.filter((r) => r.s3PathDocument !== "").map(map);
     default:
