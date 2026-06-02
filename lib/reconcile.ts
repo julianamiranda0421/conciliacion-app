@@ -256,7 +256,15 @@ const ACH_CONFIG: Record<string, AchConfig> = {
     matchDeposit: (d) => d.includes("RECAUDO DOMICILIACION ACH"),
     clienteLabel: (m) => m.sucursal || "DOMICILIACION ACH",
   },
+  "bancolombia-1144": {
+    matchDeposit: (d) => d.includes("PAGO INTERBANC DIR TESORO NACI"),
+    clienteLabel: (m) => m.sucursal || "DIR TESORO NACIONAL",
+  },
 };
+
+// Tolerancia (pesos) para absorber redondeo de centavos del banco al cruzar
+// la suma de un grupo con el valor del depósito.
+const ACH_TOL = 1;
 
 export function reconcileAch(
   banco: BankMovement[],
@@ -283,15 +291,21 @@ export function reconcileAch(
   const bancoSinTxn: BancoSinTxn[] = [];
 
   for (const dep of depositos) {
-    // Buscar el grupo cuya suma de Amount == valor del depósito
+    // Buscar el grupo cuya suma de Amount sea la más cercana al depósito
+    // (dentro de la tolerancia de centavos).
     let matchKey: string | null = null;
+    let bestDiff = Infinity;
     for (const [s3, facturas] of grupos) {
       if (usados.has(s3)) continue;
       const suma = facturas.reduce((s, f) => s + f.amount, 0);
-      if (Math.abs(suma - dep.valor) < 1) {
+      const diff = Math.abs(suma - dep.valor);
+      if (diff < bestDiff) {
+        bestDiff = diff;
         matchKey = s3;
-        break;
       }
+    }
+    if (!matchKey || bestDiff > ACH_TOL) {
+      matchKey = null;
     }
     if (!matchKey) {
       bancoSinTxn.push({

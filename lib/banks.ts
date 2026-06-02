@@ -46,10 +46,10 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     id: "bancolombia-1144",
     bank: "Bancolombia",
     accountNumber: "1144",
-    alias: "Bancolombia 1144",
-    type: "general",
+    alias: "Bancolombia 1144 · Recaudo pago interbancario (DIR Tesoro Nacional)",
+    type: "recaudo",
     format: "pdf",
-    enabled: false,
+    enabled: true,
   },
   {
     id: "davivienda-7772",
