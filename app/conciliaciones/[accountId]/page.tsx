@@ -4,7 +4,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
 import { reconcile } from "@/lib/reconcile";
-import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData } from "@/lib/db";
+import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,8 @@ export default async function ConciliacionCuentaPage({
   const period = periodParam || periods[0] || "Mayo 2026";
 
   const hasData = await accountHasData(period, accountId);
+  const loads = await getLoads(period);
+  const cutoff = loads.find((l) => l.scope === accountId)?.cutoff_date ?? null;
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -36,7 +38,10 @@ export default async function ConciliacionCuentaPage({
       <div className="mt-3 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{account.bank} {account.accountNumber}</h1>
-          <p className="mt-1 text-sm text-ink-soft">{account.alias} · {period}</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {account.alias} · {period}
+            {cutoff ? ` · al corte ${cutoff}` : ""}
+          </p>
         </div>
         <Link
           href="/cargas/nueva"

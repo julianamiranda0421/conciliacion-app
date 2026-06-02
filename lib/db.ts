@@ -168,6 +168,57 @@ export async function getCrossings(period: string): Promise<CrossingDbRow[]> {
   return (data ?? []) as CrossingDbRow[];
 }
 
+// ---- Registro de cargas (fecha de corte, historial) ----
+export type LoadInfo = {
+  cutoffDate: string | null;
+  filename: string | null;
+  rowCount: number | null;
+};
+
+export async function recordLoad(period: string, scope: string, info: LoadInfo) {
+  try {
+    const sb = getSupabase();
+    await sb
+      .from("loads")
+      .upsert(
+        {
+          period,
+          scope,
+          cutoff_date: info.cutoffDate || null,
+          filename: info.filename,
+          row_count: info.rowCount,
+          updated_at: new Date().toISOString(),
+        } as never,
+        { onConflict: "period,scope" },
+      );
+  } catch (e) {
+    // Si la tabla loads aún no existe, no rompemos el flujo principal.
+    console.warn("recordLoad omitido:", e instanceof Error ? e.message : e);
+  }
+}
+
+export type LoadRow = {
+  period: string;
+  scope: string;
+  cutoff_date: string | null;
+  filename: string | null;
+  row_count: number | null;
+  updated_at: string;
+};
+
+export async function getLoads(period?: string): Promise<LoadRow[]> {
+  try {
+    const sb = getSupabase();
+    let q = sb.from("loads").select("*").order("updated_at", { ascending: false });
+    if (period) q = q.eq("period", period);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data ?? []) as LoadRow[];
+  } catch {
+    return [];
+  }
+}
+
 export async function accountHasData(period: string, accountId: string): Promise<boolean> {
   const sb = getSupabase();
   const { count } = await sb

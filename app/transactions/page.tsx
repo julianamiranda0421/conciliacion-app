@@ -1,4 +1,4 @@
-import { getTransactions, getCrossings, listTransactionPeriods } from "@/lib/db";
+import { getTransactions, getCrossings, listTransactionPeriods, getLoads } from "@/lib/db";
 import { accountLabel } from "@/lib/banks";
 import { TransactionsUpload } from "@/components/TransactionsUpload";
 import { TransactionsDashboard, type TxnView, type TxnKpis } from "@/components/TransactionsDashboard";
@@ -14,10 +14,12 @@ export default async function TransactionsPage({
   const periods = await listTransactionPeriods();
   const period = periodParam || periods[0] || "Mayo 2026";
 
-  const [txns, crossings] = await Promise.all([
+  const [txns, crossings, loads] = await Promise.all([
     getTransactions(period),
     getCrossings(period),
+    getLoads(period),
   ]);
+  const txnCutoff = loads.find((l) => l.scope === "transactions")?.cutoff_date ?? null;
 
   // Mapa de cruces por transaction_id
   const crossMap = new Map<number, { cuenta: string; valorBanco: number; diferencia: number }>();
@@ -75,6 +77,10 @@ export default async function TransactionsPage({
           <p className="mt-1 text-sm text-ink-soft">
             Base mensual de pagos aplicados (todas las cuentas). La columna{" "}
             <b>Cuenta cruce</b> se llena a medida que concilias cada cuenta.
+          </p>
+          <p className="mt-1 text-xs text-ink-soft">
+            {period}
+            {txnCutoff ? ` · al corte ${txnCutoff}` : ""}
           </p>
         </div>
         <TransactionsUpload period={period} periods={periods} />

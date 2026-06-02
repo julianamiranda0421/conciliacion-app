@@ -13,6 +13,7 @@ export function TransactionsUpload({ period }: { period: string; periods: string
   const [year, setYear] = useState(2026);
   const [month, setMonth] = useState("Mayo");
   const [file, setFile] = useState<File | null>(null);
+  const [cutoff, setCutoff] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +25,7 @@ export function TransactionsUpload({ period }: { period: string; periods: string
       const fd = new FormData();
       fd.append("file", file);
       fd.append("periodo", `${month} ${year}`);
+      fd.append("cutoff", cutoff);
       const res = await fetch("/api/transactions", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al cargar");
@@ -77,6 +79,15 @@ export function TransactionsUpload({ period }: { period: string; periods: string
             <option key={m}>{m}</option>
           ))}
         </select>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-ink-soft">Fecha de corte</span>
+          <input
+            type="date"
+            value={cutoff}
+            onChange={(e) => setCutoff(e.target.value)}
+            className="h-10 rounded-md border border-line bg-white px-3 text-sm"
+          />
+        </label>
         <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-line px-3 text-sm">
           <Upload className="h-4 w-4 text-primary" />
           <span className="max-w-[160px] truncate">{file ? file.name : "Elegir Excel"}</span>

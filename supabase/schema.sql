@@ -56,3 +56,16 @@ create table if not exists crossings (
 create index if not exists idx_cross_period on crossings(period);
 create index if not exists idx_cross_period_acct on crossings(period, account_id);
 create index if not exists idx_cross_period_txnid on crossings(period, transaction_id);
+
+-- Registro de la última carga por período y scope (transactions o cuenta).
+-- Sirve para mostrar la fecha de corte y el historial de cargas (solo el último).
+create table if not exists loads (
+  id          bigserial primary key,
+  period      text not null,
+  scope       text not null,   -- 'transactions' o el id de la cuenta
+  cutoff_date date,            -- fecha de corte
+  filename    text,
+  row_count   int,
+  updated_at  timestamptz default now()
+);
+create unique index if not exists idx_loads_period_scope on loads(period, scope);

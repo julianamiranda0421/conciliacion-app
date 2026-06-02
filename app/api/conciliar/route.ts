@@ -6,6 +6,7 @@ import {
   getTransactions,
   saveBankMovements,
   saveCrossings,
+  recordLoad,
   type TxnDbRow,
 } from "@/lib/db";
 
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
     const bankFile = form.get("bank");
     const periodo = String(form.get("periodo") ?? "");
     const accountId = String(form.get("accountId") ?? "");
+    const cutoff = String(form.get("cutoff") ?? "");
 
     if (!(bankFile instanceof File)) {
       return NextResponse.json({ error: "Falta el archivo del banco." }, { status: 400 });
@@ -70,6 +72,11 @@ export async function POST(req: Request) {
     const result = reconcile(banco, txns, periodo);
     await saveBankMovements(periodo, accountId, banco);
     await saveCrossings(periodo, accountId, result.conciliado);
+    await recordLoad(periodo, accountId, {
+      cutoffDate: cutoff,
+      filename: bankFile.name,
+      rowCount: banco.length,
+    });
 
     return NextResponse.json(result);
   } catch (err) {

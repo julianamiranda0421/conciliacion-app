@@ -25,6 +25,7 @@ export default function NuevaCargaPage() {
   const [year, setYear] = useState(2026);
   const [month, setMonth] = useState("Mayo");
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [cutoff, setCutoff] = useState("");
   const [bankFile, setBankFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export default function NuevaCargaPage() {
       fd.append("bank", bankFile);
       fd.append("accountId", account.id);
       fd.append("periodo", `${month} ${year}`);
+      fd.append("cutoff", cutoff);
       const res = await fetch("/api/conciliar", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al conciliar");
@@ -64,6 +66,7 @@ export default function NuevaCargaPage() {
             </h1>
             <p className="mt-1 text-sm text-ink-soft">
               {month} {year}
+              {cutoff ? ` · corte ${cutoff}` : ""}
             </p>
           </div>
           <Link
@@ -113,6 +116,8 @@ export default function NuevaCargaPage() {
             month={month}
             setYear={setYear}
             setMonth={setMonth}
+            cutoff={cutoff}
+            setCutoff={setCutoff}
             accountId={accountId}
             setAccountId={setAccountId}
           />
@@ -213,6 +218,8 @@ function ConfigStep({
   month,
   setYear,
   setMonth,
+  cutoff,
+  setCutoff,
   accountId,
   setAccountId,
 }: {
@@ -220,13 +227,15 @@ function ConfigStep({
   month: string;
   setYear: (y: number) => void;
   setMonth: (m: string) => void;
+  cutoff: string;
+  setCutoff: (d: string) => void;
   accountId: string | null;
   setAccountId: (id: string) => void;
 }) {
   return (
     <div>
-      <h2 className="text-lg font-semibold">Período de conciliación</h2>
-      <div className="mt-4 flex gap-4">
+      <h2 className="text-lg font-semibold">Período y corte</h2>
+      <div className="mt-4 flex flex-wrap gap-4">
         <Field label="Año">
           <select
             value={year}
@@ -249,9 +258,18 @@ function ConfigStep({
             ))}
           </select>
         </Field>
+        <Field label="Fecha de corte">
+          <input
+            type="date"
+            value={cutoff}
+            onChange={(e) => setCutoff(e.target.value)}
+            className="h-10 w-48 rounded-md border border-line bg-white px-3 text-sm"
+          />
+        </Field>
       </div>
       <p className="mt-2 text-xs text-ink-soft">
-        No se permiten cargas para períodos futuros.
+        Puedes conciliar varias veces en el mes (varios cortes). Cada carga
+        reemplaza la conciliación anterior del mes con los datos al corte indicado.
       </p>
 
       <h2 className="mt-8 text-lg font-semibold">Cuenta bancaria</h2>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseTransactionsAll } from "@/lib/parseTransactions";
-import { saveTransactions } from "@/lib/db";
+import { saveTransactions, recordLoad } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,6 +10,7 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file");
     const periodo = String(form.get("periodo") ?? "");
+    const cutoff = String(form.get("cutoff") ?? "");
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Falta el archivo de transactions." }, { status: 400 });
@@ -25,6 +26,11 @@ export async function POST(req: Request) {
     }
 
     await saveTransactions(periodo, rows);
+    await recordLoad(periodo, "transactions", {
+      cutoffDate: cutoff,
+      filename: file.name,
+      rowCount: rows.length,
+    });
     return NextResponse.json({ count: rows.length, periodo });
   } catch (err) {
     console.error("Error cargando transactions:", err);
