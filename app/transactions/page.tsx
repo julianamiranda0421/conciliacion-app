@@ -35,10 +35,14 @@ export default async function TransactionsPage({
 
   const rows: TxnView[] = txns.map((t) => {
     const cross = crossMap.get(t.transaction_id);
+    const amount = Number(t.amount);
+    const bia = Number(t.bia_credits_used) || 0;
     return {
       transactionId: t.transaction_id,
       billId: t.bill_id ?? "",
-      amount: Number(t.amount),
+      amount,
+      biaCreditos: bia,
+      totalFactura: amount + bia,
       paymentMethod: t.payment_method_name || t.payment_method_type,
       status: t.status,
       paymentDate: t.payment_date ?? "",
@@ -62,6 +66,7 @@ export default async function TransactionsPage({
     totalAplicado: rows.reduce((s, r) => s + r.amount, 0),
     valorRecaudadoBanco: crossings.reduce((s, c) => s + Number(c.valor_banco), 0),
     valorCruzado: crossings.reduce((s, c) => s + Number(c.valor_aplicado), 0),
+    biaCreditos: rows.reduce((s, r) => s + r.biaCreditos, 0),
     nCruzados: rows.filter((r) => r.cuentaCruce !== "Sin cruzar").length,
     diferenciaCount: crossings.filter((c) => Number(c.diferencia) !== 0).length,
     porCuenta: [...porCuentaMap.entries()]

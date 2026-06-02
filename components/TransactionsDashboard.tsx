@@ -6,6 +6,8 @@ export type TxnView = {
   transactionId: number;
   billId: string;
   amount: number;
+  biaCreditos: number;
+  totalFactura: number;
   paymentMethod: string;
   status: string;
   paymentDate: string;
@@ -19,6 +21,7 @@ export type TxnKpis = {
   totalAplicado: number;
   valorRecaudadoBanco: number;
   valorCruzado: number;
+  biaCreditos: number;
   nCruzados: number;
   diferenciaCount: number;
   porCuenta: { cuenta: string; count: number; valor: number }[];
@@ -71,10 +74,11 @@ export function TransactionsDashboard({
   return (
     <div>
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Cantidad de pagos" value={kpis.cantidadPagos.toLocaleString("es-CO")} sub={money(kpis.totalAplicado) + " aplicado"} />
         <Kpi label="Valor recaudado en banco" value={money(kpis.valorRecaudadoBanco)} sub={`${kpis.nCruzados} cruzados`} cls="text-success" />
         <Kpi label="Valor cruzado (transactions)" value={money(kpis.valorCruzado)} sub={`${pct}% del total`} bar={pct} />
+        <Kpi label="Bia créditos usados" value={money(kpis.biaCreditos)} sub="aplicados con bonos" cls="text-primary" />
         <Kpi label="Diferencias" value={String(kpis.diferenciaCount)} sub="casos banco ≠ aplicado" cls={kpis.diferenciaCount ? "text-error" : "text-success"} />
       </div>
 
@@ -122,7 +126,7 @@ export function TransactionsDashboard({
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                {["Txn ID", "Bill", "Valor aplicado", "Método", "Estado", "Fecha pago", "Cuenta cruce", "Valor banco", "Diferencia"].map((h) => (
+                {["Txn ID", "Bill", "Valor aplicado", "Bia créditos", "Total factura", "Método", "Estado", "Fecha pago", "Cuenta cruce", "Valor banco", "Diferencia"].map((h) => (
                   <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-left text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
                 ))}
               </tr>
@@ -133,6 +137,8 @@ export function TransactionsDashboard({
                   <td className="border-b border-line px-3.5 py-2.5 text-sm">{r.transactionId}</td>
                   <td className="border-b border-line px-3.5 py-2.5 text-sm">{r.billId}</td>
                   <td className="border-b border-line px-3.5 py-2.5 text-right text-sm tabular-nums">{money(r.amount)}</td>
+                  <td className={`border-b border-line px-3.5 py-2.5 text-right text-sm tabular-nums ${r.biaCreditos ? "font-medium text-primary" : "text-ink-soft"}`}>{r.biaCreditos ? money(r.biaCreditos) : "—"}</td>
+                  <td className="border-b border-line px-3.5 py-2.5 text-right text-sm font-medium tabular-nums">{money(r.totalFactura)}</td>
                   <td className="border-b border-line px-3.5 py-2.5 text-sm">{r.paymentMethod}</td>
                   <td className="border-b border-line px-3.5 py-2.5 text-sm">{r.status}</td>
                   <td className="border-b border-line px-3.5 py-2.5 text-sm">{r.paymentDate}</td>
