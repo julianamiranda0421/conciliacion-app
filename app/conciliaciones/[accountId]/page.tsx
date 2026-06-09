@@ -4,7 +4,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getBills360ForTxns, getMovementFlags } from "@/lib/db";
+import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getBills360ForTxns, getMovementFlags, getObservations } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
 
 export const dynamic = "force-dynamic";
@@ -98,7 +98,10 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
   // Enriquecer el detalle conciliado con datos de la factura (bills_360):
   // período de factura, valor de factura y status de factura.
   const txnIds = [...new Set(result.conciliado.map((c) => c.transactionId).filter((n) => n > 0))];
-  const minis = await getBills360ForTxns(txnIds);
+  const [minis, obs] = await Promise.all([
+    getBills360ForTxns(txnIds),
+    getObservations(period, accountId),
+  ]);
   const byTxn = new Map<number, typeof minis>();
   for (const m of minis) {
     const arr = byTxn.get(m.transaction_id) ?? [];
@@ -120,6 +123,7 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
             ? m.bill_status ?? "PARCIAL"
             : "SUCCESS"
           : "SUCCESS",
+        observacion: obs[String(c.transactionId)] ?? "",
       };
     }),
   };

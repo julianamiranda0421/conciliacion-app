@@ -29,6 +29,7 @@ export type Conciliado = {
   periodoFactura?: string;
   valorFactura?: number;
   statusFactura?: string;
+  observacion?: string; // nota manual (persistida por transaction_id)
 };
 
 export type BancoSinTxn = {

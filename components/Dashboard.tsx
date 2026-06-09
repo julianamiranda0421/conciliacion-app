@@ -42,6 +42,7 @@ const TAB_CONCILIADO: TabDef = {
     { key: "fechaBanco", label: "Fecha banco" },
     { key: "tipo", label: "Tipo" },
     { key: "statusFactura", label: "Status factura" },
+    { key: "observacion", label: "Observaciones" },
   ],
 };
 
@@ -135,6 +136,17 @@ export function Dashboard({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  // Guarda la observación de una partida conciliada (por transaction_id).
+  async function saveNote(transactionId: string, texto: string) {
+    if (!transactionId) return;
+    await fetch("/api/observations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ period, accountId, transactionId: Number(transactionId), texto }),
+    }).catch(() => {});
+  }
 
   const tab = TABS.find((t) => t.id === current) ?? TABS[0];
   const rawRows = (result[tab.id] as Record<string, unknown>[]) ?? [];
@@ -384,6 +396,25 @@ export function Dashboard({
                   return (
                     <tr key={i} className="hover:bg-primary-light/40">
                       {tab.cols.map((c) => {
+                        // Conciliado: observaciones editables (se guardan al salir del campo)
+                        if (tab.id === "conciliado" && c.key === "observacion") {
+                          const id = String(row.transactionId ?? "");
+                          const val = notes[id] ?? String(row.observacion ?? "");
+                          const hasDiff = Number(row.diferencia) !== 0;
+                          return (
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                              <input
+                                value={val}
+                                onChange={(e) => setNotes((p) => ({ ...p, [id]: e.target.value }))}
+                                onBlur={(e) => saveNote(id, e.target.value)}
+                                placeholder={hasDiff ? "Anota la diferencia…" : "—"}
+                                className={`h-8 w-52 rounded-md border px-2 text-xs ${
+                                  hasDiff ? "border-error/50 bg-error/5" : "border-line"
+                                }`}
+                              />
+                            </td>
+                          );
+                        }
                         // Otros ingresos: botón para marcar como recaudo
                         if (tab.id === "otrosIngresos" && c.key === "accion") {
                           return (

@@ -264,6 +264,47 @@ export async function removeMovementFlag(period: string, accountId: string, sig:
   if (error) throw new Error(`removeMovementFlag: ${error.message}`);
 }
 
+// ---- Observaciones por partida conciliada (clave por transaction_id) ----
+export async function getObservations(
+  period: string,
+  accountId: string,
+): Promise<Record<string, string>> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("observations")
+      .select("transaction_id,texto")
+      .eq("period", period)
+      .eq("account_id", accountId);
+    if (error) throw error;
+    const out: Record<string, string> = {};
+    for (const r of data ?? []) {
+      const row = r as { transaction_id: number; texto: string | null };
+      out[String(row.transaction_id)] = row.texto ?? "";
+    }
+    return out;
+  } catch (e) {
+    console.warn("getObservations omitido:", e instanceof Error ? e.message : e);
+    return {};
+  }
+}
+
+export async function saveObservation(
+  period: string,
+  accountId: string,
+  transactionId: number,
+  texto: string,
+) {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("observations")
+    .upsert(
+      { period, account_id: accountId, transaction_id: transactionId, texto, updated_at: new Date().toISOString() } as never,
+      { onConflict: "period,account_id,transaction_id" },
+    );
+  if (error) throw new Error(`saveObservation: ${error.message}`);
+}
+
 export async function accountHasData(period: string, accountId: string): Promise<boolean> {
   const sb = getSupabase();
   const { count } = await sb

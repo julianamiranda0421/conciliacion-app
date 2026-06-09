@@ -112,6 +112,18 @@ create table if not exists movement_flags (
 );
 create index if not exists idx_mflags_period_acct on movement_flags(period, account_id);
 
+-- Observaciones manuales por partida conciliada (clave por transaction_id, sobrevive re-cargas).
+create table if not exists observations (
+  id              bigserial primary key,
+  period          text not null,
+  account_id      text not null,
+  transaction_id  bigint not null,
+  texto           text,
+  updated_at      timestamptz default now(),
+  unique(period, account_id, transaction_id)
+);
+create index if not exists idx_obs_period_acct on observations(period, account_id);
+
 create index if not exists idx_b360_bill on bills_360(bill_id);
 create index if not exists idx_b360_period on bills_360(period);
 create index if not exists idx_b360_company on bills_360(company_id);
