@@ -307,3 +307,161 @@ export async function getBills360Summary(): Promise<Bills360Summary> {
     (lastQ.data?.[0] as { synced_at?: string } | undefined)?.synced_at ?? null;
   return { filas, conPago, sinPago: Math.max(0, filas - conPago), lastSync };
 }
+
+// ---- Cartera 360: vista gerencial (agregados por factura) ----
+
+// 'M-YYYY' -> número ordenable (mayor = más reciente). Ej: '5-2026' -> 202605.
+function periodKey(p: string): number {
+  const [m, y] = p.split("-").map((x) => Number(x));
+  return (y || 0) * 100 + (m || 0);
+}
+
+// Lista de períodos presentes en bills_360, del más reciente al más antiguo.
+export async function listBills360Periods(): Promise<string[]> {
+  const sb = getSupabase();
+  const set = new Set<string>();
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb
+      .from("bills_360")
+      .select("period")
+      .range(from, from + size - 1);
+    if (error) throw new Error(`listBills360Periods: ${error.message}`);
+    for (const r of data ?? []) {
+      const p = (r as { period: string | null }).period;
+      if (p) set.add(p);
+    }
+    if (!data || data.length < size) break;
+  }
+  return [...set].sort((a, b) => periodKey(b) - periodKey(a));
+}
+
+type CarteraRow = {
+  bill_id: number;
+  bill_status: string | null;
+  total: number | null;
+  transaction_id: number | null;
+  transaction_state: string | null;
+  payment_date: string | null;
+  is_partial_payment: boolean | null;
+  amount: number | null;
+  bia_credits: number | null;
+};
+
+async function fetchCarteraRows(period?: string): Promise<CarteraRow[]> {
+  const sb = getSupabase();
+  const cols =
+    "bill_id,bill_status,total,transaction_id,transaction_state,payment_date,is_partial_payment,amount,bia_credits";
+  const out: CarteraRow[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb.from("bills_360").select(cols).range(from, from + size - 1);
+    if (period) q = q.eq("period", period);
+    const { data, error } = await q;
+    if (error) throw new Error(`getCartera: ${error.message}`);
+    out.push(...((data ?? []) as CarteraRow[]));
+    if (!data || data.length < size) break;
+  }
+  return out;
+}
+
+export type CarteraData = {
+  totalFacturas: number;
+  valorTotal: number;
+  facturasSuccess: number;
+  valorPagadas: number;
+  pctPagadoFacturas: number;
+  pctPagadoValor: number;
+  facturasPendientes: number;
+  valorPendientes: number;
+  facturasParcial: number;
+  valorParcial: number;
+  facturasConCreditos: number;
+  valorCreditos: number;
+  curva: { date: string; pct: number }[];
+  lastSync: string | null;
+};
+
+// Agregados gerenciales sobre bills_360. period = undefined => todos.
+// OJO: el grano es factura×pago. Para evitar sobreconteo:
+//  - los VALORES de factura se toman de bills.total (una vez por factura);
+//  - el RECAUDO y los BIA CRÉDITOS se deduplican por transaction_id, porque una
+//    misma transacción (amount/bia_credits) se repite en cada factura que paga.
+export async function getCartera(period?: string): Promise<CarteraData> {
+  const rows = await fetchCarteraRows(period);
+
+  type Bill = { status: string | null; total: number; paid: boolean; partial: boolean; credits: boolean };
+  const bills = new Map<number, Bill>();
+  const txns = new Map<number, { amount: number; credits: number; date: string | null }>();
+
+  for (const r of rows) {
+    let b = bills.get(r.bill_id);
+    if (!b) {
+      b = { status: r.bill_status, total: Number(r.total) || 0, paid: false, partial: false, credits: false };
+      bills.set(r.bill_id, b);
+    }
+    const success = r.transaction_state === "SUCCESS";
+    if (r.transaction_id != null && success) b.paid = true;
+    if (r.is_partial_payment === true) b.partial = true;
+    if (success && (Number(r.bia_credits) || 0) > 0) b.credits = true;
+    if (r.transaction_id != null && success && !txns.has(r.transaction_id)) {
+      txns.set(r.transaction_id, {
+        amount: Number(r.amount) || 0,
+        credits: Number(r.bia_credits) || 0,
+        date: r.payment_date,
+      });
+    }
+  }
+
+  const billArr = [...bills.values()];
+  const sum = (arr: Bill[]) => arr.reduce((s, b) => s + b.total, 0);
+  const success = billArr.filter((b) => b.status === "SUCCESS");
+  const pendientes = billArr.filter((b) => b.status === "CREATED");
+  const parcial = billArr.filter((b) => b.partial);
+  const conCreditos = billArr.filter((b) => b.credits);
+
+  const totalFacturas = billArr.length;
+  const valorTotal = sum(billArr);
+  const valorPagadas = sum(success);
+  const valorCreditos = [...txns.values()].reduce((s, t) => s + t.credits, 0);
+
+  // Curva de recaudo: recaudo en efectivo (amount) por día, acumulado a % del total.
+  const byDay = new Map<string, number>();
+  for (const t of txns.values()) {
+    if (!t.date || t.amount <= 0) continue;
+    const d = t.date.slice(0, 10);
+    byDay.set(d, (byDay.get(d) || 0) + t.amount);
+  }
+  const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const totalRecaudo = days.reduce((s, [, v]) => s + v, 0);
+  let acc = 0;
+  const curva = days.map(([date, v]) => {
+    acc += v;
+    return { date, pct: totalRecaudo ? (acc / totalRecaudo) * 100 : 0 };
+  });
+
+  const sb = getSupabase();
+  const lastQ = await sb
+    .from("bills_360")
+    .select("synced_at")
+    .order("synced_at", { ascending: false })
+    .limit(1);
+  const lastSync = (lastQ.data?.[0] as { synced_at?: string } | undefined)?.synced_at ?? null;
+
+  return {
+    totalFacturas,
+    valorTotal,
+    facturasSuccess: success.length,
+    valorPagadas,
+    pctPagadoFacturas: totalFacturas ? (success.length / totalFacturas) * 100 : 0,
+    pctPagadoValor: valorTotal ? (valorPagadas / valorTotal) * 100 : 0,
+    facturasPendientes: pendientes.length,
+    valorPendientes: sum(pendientes),
+    facturasParcial: parcial.length,
+    valorParcial: sum(parcial),
+    facturasConCreditos: conCreditos.length,
+    valorCreditos,
+    curva,
+    lastSync,
+  };
+}
