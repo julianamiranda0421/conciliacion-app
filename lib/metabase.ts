@@ -2,9 +2,15 @@
 // y devuelve todas las filas (factura ⟕ pago, ya filtrado a 2026 dentro del card).
 // La API key NUNCA debe llegar al cliente: solo se usa en API routes / server.
 
-const url = process.env.METABASE_URL;
-const apiKey = process.env.METABASE_API_KEY;
-const cardId = process.env.METABASE_CARD_ID;
+// Limpia el valor: quita BOM (U+FEFF) y espacios/saltos. Vercel a veces guarda
+// la variable con un BOM al inicio que rompe fetch al ponerla en un header HTTP
+// ("Cannot convert argument to a ByteString ... value of 65279").
+const cleanEnv = (v: string | undefined) =>
+  v?.replace(/^﻿/, "").trim() || undefined;
+
+const url = cleanEnv(process.env.METABASE_URL);
+const apiKey = cleanEnv(process.env.METABASE_API_KEY);
+const cardId = cleanEnv(process.env.METABASE_CARD_ID);
 
 export type Bill360Raw = {
   id: number; // bill_id
