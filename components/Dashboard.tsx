@@ -210,7 +210,9 @@ export function Dashboard({
   const kpis = [
     { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: k.totalDevValor > 0 ? "neto (− cheques devueltos)" : "todos los ingresos", bar: pctConc },
     { cls: "ok", lbl: "Total ingreso conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso` },
-    { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
+    isAch
+      ? { cls: k.diferenciaValor > 1 ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` }
+      : { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
     { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "ingreso al banco − conciliado" },
   ];
 
