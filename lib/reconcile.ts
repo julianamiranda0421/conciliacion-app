@@ -465,7 +465,7 @@ export function reconcileAch(
       punto: m.sucursal,
       billId: m.billId,
       valor: m.valor,
-      status: config.matchDeposit(m.descripcion) ? "Abono sin aplicar" : "Ingreso sin conciliar",
+      status: config.matchDeposit(m.descripcion) ? "Partida conciliatoria" : "Ok",
     }));
 
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);

@@ -369,16 +369,16 @@ function Cell({ col, value }: { col: Col; value: unknown }) {
     );
   }
   if (col.key === "status") {
-    const critico = value === "Cheque devuelto";
+    const v = String(value ?? "");
+    const cls =
+      v === "Ok"
+        ? "bg-success/15 text-success"
+        : v === "Cheque devuelto"
+          ? "bg-error/10 text-error"
+          : "bg-warning/20 text-warning";
     return (
       <td className={base}>
-        <span
-          className={`rounded-md px-2 py-1 text-xs font-bold ${
-            critico ? "bg-error/10 text-error" : "bg-warning/20 text-warning"
-          }`}
-        >
-          {String(value ?? "")}
-        </span>
+        <span className={`rounded-md px-2 py-1 text-xs font-bold ${cls}`}>{v}</span>
       </td>
     );
   }
