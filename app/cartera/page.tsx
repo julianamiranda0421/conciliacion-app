@@ -6,10 +6,19 @@ import {
   PieChart,
   Sparkles,
   Percent,
+  Landmark,
+  Receipt,
+  Scale,
 } from "lucide-react";
-import { getCartera, listBills360Periods } from "@/lib/db";
+import {
+  getCartera,
+  listBills360Periods,
+  getCajaConciliada,
+  listBankPeriods,
+} from "@/lib/db";
 import { CarteraControls } from "@/components/CarteraControls";
-import { RecaudoCurve } from "@/components/RecaudoCurve";
+import { BankPeriodSelect } from "@/components/BankPeriodSelect";
+import { IngresoVsAplicado } from "@/components/IngresoVsAplicado";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +32,23 @@ const cop = new Intl.NumberFormat("es-CO", {
 export default async function CarteraPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; bankPeriod?: string }>;
 }) {
-  const { period: periodParam } = await searchParams;
-  const periods = await listBills360Periods();
+  const { period: periodParam, bankPeriod: bankParam } = await searchParams;
+
+  const [periods, bankPeriods] = await Promise.all([
+    listBills360Periods(),
+    listBankPeriods(),
+  ]);
+
   const current = periodParam ?? periods[0] ?? "todos";
   const isTodos = current === "todos" || periods.length === 0;
-  const data = await getCartera(isTodos ? undefined : current);
+  const bankPeriod = bankParam ?? bankPeriods[0] ?? "";
+
+  const [data, caja] = await Promise.all([
+    getCartera(isTodos ? undefined : current),
+    getCajaConciliada(bankPeriod || undefined),
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl p-6">
@@ -41,7 +60,12 @@ export default async function CarteraPage({
             {isTodos ? " (todos los períodos)" : ` del período ${current}`}.
           </p>
         </div>
-        <CarteraControls periods={periods} current={isTodos ? "todos" : current} lastSync={data.lastSync} />
+        <CarteraControls
+          periods={periods}
+          current={isTodos ? "todos" : current}
+          bankPeriod={bankPeriod || undefined}
+          lastSync={data.lastSync}
+        />
       </div>
 
       {/* Encabezado: totales y avance */}
@@ -69,13 +93,40 @@ export default async function CarteraPage({
         <Card icon={<Sparkles className="h-5 w-5 text-sky-500" />} label="Valor bia créditos usados" value={cop.format(data.valorCreditos)} />
       </div>
 
-      {/* Curva de recaudo */}
+      {/* Caja conciliada: ingreso al banco vs aplicado (por mes de extracto) */}
       <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold">Curva de recaudo</h2>
-        <p className="mb-3 text-xs text-ink-soft">
-          % del recaudo acumulado en el tiempo {isTodos ? "(todos los períodos)" : `(período ${current})`}.
-        </p>
-        <RecaudoCurve points={data.curva} />
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Caja conciliada — ingreso al banco vs aplicado</h2>
+            <p className="mt-1 text-xs text-ink-soft">
+              Por <b>mes de extracto bancario</b> (puede pagar facturas de meses anteriores).
+              Solo cuentas ya conciliadas.
+            </p>
+          </div>
+          <BankPeriodSelect bankPeriods={bankPeriods} current={bankPeriod} billPeriod={isTodos ? "todos" : current} />
+        </div>
+
+        {bankPeriods.length === 0 ? (
+          <div className="flex h-32 items-center justify-center text-sm text-ink-soft">
+            Aún no hay extractos bancarios conciliados.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-2 gap-4 self-start">
+              <Card icon={<Landmark className="h-5 w-5 text-primary" />} label="Ingreso al banco" value={cop.format(caja.ingresoBanco)} />
+              <Card icon={<Receipt className="h-5 w-5 text-success" />} label="Aplicado en facturas" value={cop.format(caja.aplicado)} />
+              <Card
+                icon={<Scale className={`h-5 w-5 ${caja.diferencia === 0 ? "text-success" : "text-error"}`} />}
+                label="Diferencia"
+                value={cop.format(caja.diferencia)}
+                sub={caja.nConDiferencia > 0 ? `${caja.nConDiferencia} con diferencia` : "todo cuadra"}
+                accent={caja.diferencia === 0}
+              />
+              <Card icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Facturas pagadas (conciliadas)" value={nf.format(caja.nFacturas)} />
+            </div>
+            <IngresoVsAplicado ingresoBanco={caja.ingresoBanco} aplicado={caja.aplicado} />
+          </div>
+        )}
       </div>
     </div>
   );

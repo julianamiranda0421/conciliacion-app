@@ -378,7 +378,6 @@ export type CarteraData = {
   valorParcial: number;
   facturasConCreditos: number;
   valorCreditos: number;
-  curva: { date: string; pct: number }[];
   lastSync: string | null;
 };
 
@@ -392,7 +391,7 @@ export async function getCartera(period?: string): Promise<CarteraData> {
 
   type Bill = { status: string | null; total: number; paid: boolean; partial: boolean; credits: boolean };
   const bills = new Map<number, Bill>();
-  const txns = new Map<number, { amount: number; credits: number; date: string | null }>();
+  const txns = new Map<number, { credits: number }>();
 
   for (const r of rows) {
     let b = bills.get(r.bill_id);
@@ -405,11 +404,7 @@ export async function getCartera(period?: string): Promise<CarteraData> {
     if (r.is_partial_payment === true) b.partial = true;
     if (success && (Number(r.bia_credits) || 0) > 0) b.credits = true;
     if (r.transaction_id != null && success && !txns.has(r.transaction_id)) {
-      txns.set(r.transaction_id, {
-        amount: Number(r.amount) || 0,
-        credits: Number(r.bia_credits) || 0,
-        date: r.payment_date,
-      });
+      txns.set(r.transaction_id, { credits: Number(r.bia_credits) || 0 });
     }
   }
 
@@ -424,21 +419,6 @@ export async function getCartera(period?: string): Promise<CarteraData> {
   const valorTotal = sum(billArr);
   const valorPagadas = sum(success);
   const valorCreditos = [...txns.values()].reduce((s, t) => s + t.credits, 0);
-
-  // Curva de recaudo: recaudo en efectivo (amount) por día, acumulado a % del total.
-  const byDay = new Map<string, number>();
-  for (const t of txns.values()) {
-    if (!t.date || t.amount <= 0) continue;
-    const d = t.date.slice(0, 10);
-    byDay.set(d, (byDay.get(d) || 0) + t.amount);
-  }
-  const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  const totalRecaudo = days.reduce((s, [, v]) => s + v, 0);
-  let acc = 0;
-  const curva = days.map(([date, v]) => {
-    acc += v;
-    return { date, pct: totalRecaudo ? (acc / totalRecaudo) * 100 : 0 };
-  });
 
   const sb = getSupabase();
   const lastQ = await sb
@@ -461,7 +441,44 @@ export async function getCartera(period?: string): Promise<CarteraData> {
     valorParcial: sum(parcial),
     facturasConCreditos: conCreditos.length,
     valorCreditos,
-    curva,
     lastSync,
+  };
+}
+
+// ---- Caja conciliada: ingreso al banco vs aplicado (por mes de EXTRACTO bancario) ----
+// Fuente = crossings (cruce banco↔pago ya conciliado). El período aquí es el mes del
+// extracto bancario (texto, ej. "Mayo 2026"), distinto del período de la factura.
+
+export async function listBankPeriods(): Promise<string[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("crossings").select("period");
+  if (error) throw new Error(`listBankPeriods: ${error.message}`);
+  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))];
+}
+
+export type CajaConciliada = {
+  ingresoBanco: number;
+  aplicado: number;
+  diferencia: number;
+  nFacturas: number;
+  nConDiferencia: number;
+};
+
+export async function getCajaConciliada(bankPeriod?: string): Promise<CajaConciliada> {
+  const sb = getSupabase();
+  let q = sb.from("crossings").select("valor_banco,valor_aplicado,diferencia");
+  if (bankPeriod) q = q.eq("period", bankPeriod);
+  const { data, error } = await q;
+  if (error) throw new Error(`getCajaConciliada: ${error.message}`);
+  const rows = (data ?? []) as { valor_banco: number; valor_aplicado: number; diferencia: number }[];
+  const ingresoBanco = rows.reduce((s, r) => s + (Number(r.valor_banco) || 0), 0);
+  const aplicado = rows.reduce((s, r) => s + (Number(r.valor_aplicado) || 0), 0);
+  const diferencia = rows.reduce((s, r) => s + (Number(r.diferencia) || 0), 0);
+  return {
+    ingresoBanco,
+    aplicado,
+    diferencia,
+    nFacturas: rows.length,
+    nConDiferencia: rows.filter((r) => Number(r.diferencia) !== 0).length,
   };
 }

@@ -16,10 +16,12 @@ function fmtFecha(iso: string | null): string {
 export function CarteraControls({
   periods,
   current,
+  bankPeriod,
   lastSync,
 }: {
   periods: string[];
   current: string;
+  bankPeriod?: string;
   lastSync: string | null;
 }) {
   const router = useRouter();
@@ -28,7 +30,10 @@ export function CarteraControls({
   const [error, setError] = useState<string | null>(null);
 
   function onPeriodChange(value: string) {
-    startTransition(() => router.push(`/cartera?period=${encodeURIComponent(value)}`));
+    const params = new URLSearchParams();
+    params.set("period", value);
+    if (bankPeriod) params.set("bankPeriod", bankPeriod);
+    startTransition(() => router.push(`/cartera?${params.toString()}`));
   }
 
   async function sync() {
