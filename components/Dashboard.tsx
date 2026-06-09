@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import type { ReconResult } from "@/lib/reconcile";
 
 const money = (v: unknown) =>
@@ -94,7 +94,7 @@ const TAB_OTROS: TabDef = {
     { key: "concepto", label: "Concepto" },
     { key: "punto", label: "Punto" },
     { key: "valor", label: "Valor", num: true },
-    { key: "status", label: "Status" },
+    { key: "accion", label: "Acción" },
   ],
 };
 
@@ -345,7 +345,7 @@ export function Dashboard({
       )}
       {tab.id === "otrosIngresos" && (
         <p className="mt-3 text-xs text-ink-soft">
-          Marca en <b>Status</b> las partidas que sean recaudo; pasarán a “Partidas conciliatorias recaudo”.
+          Usa <b>Marcar recaudo</b> en las partidas que sean recaudo; pasarán a “Partidas conciliatorias recaudo”.
         </p>
       )}
 
@@ -384,21 +384,18 @@ export function Dashboard({
                   return (
                     <tr key={i} className="hover:bg-primary-light/40">
                       {tab.cols.map((c) => {
-                        // Otros ingresos: status = selector Ok / Partida de recaudo
-                        if (tab.id === "otrosIngresos" && c.key === "status") {
+                        // Otros ingresos: botón para marcar como recaudo
+                        if (tab.id === "otrosIngresos" && c.key === "accion") {
                           return (
                             <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
-                              <select
-                                value="ok"
+                              <button
+                                onClick={() => setRecaudo(sig, true)}
                                 disabled={rowBusy}
-                                onChange={(e) => {
-                                  if (e.target.value === "recaudo") setRecaudo(sig, true);
-                                }}
-                                className="h-8 rounded-md border border-line bg-white px-2 text-xs disabled:opacity-50"
+                                className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-primary transition hover:border-primary hover:bg-primary-light/40 disabled:opacity-50"
                               >
-                                <option value="ok">Ok</option>
-                                <option value="recaudo">Partida de recaudo</option>
-                              </select>
+                                <Plus className="h-3.5 w-3.5" />
+                                Marcar recaudo
+                              </button>
                             </td>
                           );
                         }
