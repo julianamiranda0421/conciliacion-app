@@ -9,11 +9,13 @@ const money = (v: unknown) =>
     : "$" + Number(v).toLocaleString("es-CO", { maximumFractionDigits: 0 });
 
 type Col = { key: string; label: string; num?: boolean };
+type FilterType = "text" | "select" | "multi";
+type FilterDef = { key: string; label: string; type?: FilterType };
 type TabDef = {
   id: keyof ReconResult;
   label: string;
   cols: Col[];
-  filters?: { key: string; label: string }[];
+  filters?: FilterDef[];
 };
 
 const TABS: TabDef[] = [
@@ -21,23 +23,24 @@ const TABS: TabDef[] = [
     id: "conciliado",
     label: "✅ Conciliado",
     filters: [
-      { key: "tipo", label: "Tipo" },
-      { key: "nivelMatch", label: "Match" },
+      { key: "billIdTxn", label: "Factura", type: "text" },
+      { key: "tipo", label: "Tipo", type: "select" },
+      { key: "statusFactura", label: "Status factura", type: "multi" },
     ],
     cols: [
-      { key: "transactionId", label: "Txn ID" },
-      { key: "billIdTxn", label: "Bill (txn)" },
-      { key: "billIdBanco", label: "Bill (banco)" },
+      { key: "transactionId", label: "TransacciónID" },
+      { key: "billIdTxn", label: "Factura" },
+      { key: "billIdBanco", label: "Factura Banco" },
+      { key: "periodoFactura", label: "Período factura" },
+      { key: "descripcion", label: "Descripción" },
+      { key: "valorFactura", label: "Valor factura", num: true },
       { key: "valorBanco", label: "Valor banco", num: true },
       { key: "valorAplicado", label: "Valor aplicado", num: true },
-      { key: "diferencia", label: "Diferencia", num: true },
       { key: "biaCreditos", label: "Bia créditos", num: true },
-      { key: "totalFactura", label: "Total factura", num: true },
+      { key: "diferencia", label: "Diferencia", num: true },
       { key: "fechaBanco", label: "Fecha banco" },
-      { key: "fechaPago", label: "Fecha pago" },
-      { key: "sucursal", label: "Punto" },
       { key: "tipo", label: "Tipo" },
-      { key: "nivelMatch", label: "Match" },
+      { key: "statusFactura", label: "Status factura" },
     ],
   },
   {
@@ -99,19 +102,33 @@ const TABS: TabDef[] = [
 export function Dashboard({ result }: { result: ReconResult }) {
   const [current, setCurrent] = useState<keyof ReconResult>("conciliado");
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string | string[]>>({});
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
 
   const tab = TABS.find((t) => t.id === current)!;
   const rawRows = (result[current] as Record<string, unknown>[]) ?? [];
+  const filterType = (key: string): FilterType =>
+    tab.filters?.find((f) => f.key === key)?.type ?? "select";
 
   const rows = useMemo(() => {
     const q = search.toLowerCase();
     let r = rawRows.filter((row) => {
       if (q && !Object.values(row).some((v) => String(v ?? "").toLowerCase().includes(q)))
         return false;
-      for (const k in filters) if (String(row[k]) !== filters[k]) return false;
+      for (const k in filters) {
+        const fv = filters[k];
+        const cell = String(row[k] ?? "");
+        if (Array.isArray(fv)) {
+          if (fv.length && !fv.includes(cell)) return false;
+        } else if (fv) {
+          if (filterType(k) === "text") {
+            if (!cell.toLowerCase().includes(fv.toLowerCase())) return false;
+          } else if (cell !== fv) {
+            return false;
+          }
+        }
+      }
       return true;
     });
     if (sortKey) {
@@ -128,15 +145,13 @@ export function Dashboard({ result }: { result: ReconResult }) {
   }, [rawRows, search, filters, sortKey, sortAsc]);
 
   const k = result.resumen;
-  const total = k.totalConc + k.totalBst;
-  const pct = total > 0 ? Math.round((k.totalConc / total) * 100) : 100;
+  const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
   const kpis = [
-    { cls: "ok", lbl: "Conciliado", val: money(k.totalConc), sub: `${k.nConc} mov · ${pct}%`, bar: pct },
-    { cls: "warn", lbl: "En Banco, sin transaction ID", val: money(k.totalBst), sub: `${k.nBst} mov` },
-    { cls: "warn", lbl: "En transactions, sin mov Bancario", val: money(k.totalTsb), sub: `${k.nTsb} mov` },
-    { cls: k.nCritico ? "bad" : "warn", lbl: "Cheques devueltos", val: String(k.nDev), sub: `${k.nCritico} críticos` },
-    { cls: k.descuadre ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` },
+    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: "todo lo que ingresó (positivos)", bar: pctConc },
+    { cls: "ok", lbl: "Total ingreso conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso` },
+    { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
+    { cls: k.descuadre ? "bad" : "ok", lbl: "Diferencia (recaudo)", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` },
   ];
 
   const valClass = (cls: string) =>
@@ -145,7 +160,7 @@ export function Dashboard({ result }: { result: ReconResult }) {
   return (
     <div>
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((c) => (
           <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
             <div className="text-[11px] uppercase tracking-wide text-ink-soft">{c.lbl}</div>
@@ -198,10 +213,69 @@ export function Dashboard({ result }: { result: ReconResult }) {
           const vals = [...new Set(rawRows.map((r) => r[f.key]).filter((v) => v != null && v !== ""))]
             .map(String)
             .sort();
+
+          // Filtro de texto (contiene)
+          if (f.type === "text") {
+            return (
+              <input
+                key={f.key}
+                value={(filters[f.key] as string) ?? ""}
+                onChange={(e) =>
+                  setFilters((prev) => {
+                    const next = { ...prev };
+                    if (e.target.value) next[f.key] = e.target.value;
+                    else delete next[f.key];
+                    return next;
+                  })
+                }
+                placeholder={f.label}
+                className="h-10 w-40 rounded-md border border-line bg-white px-3 text-sm"
+              />
+            );
+          }
+
+          // Filtro multi-selección (chips)
+          if (f.type === "multi") {
+            const sel = (filters[f.key] as string[]) ?? [];
+            return (
+              <div key={f.key} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-sm text-ink-soft">{f.label}:</span>
+                {vals.map((v) => {
+                  const on = sel.includes(v);
+                  return (
+                    <button
+                      key={v}
+                      onClick={() =>
+                        setFilters((prev) => {
+                          const cur = Array.isArray(prev[f.key]) ? [...(prev[f.key] as string[])] : [];
+                          const i = cur.indexOf(v);
+                          if (i >= 0) cur.splice(i, 1);
+                          else cur.push(v);
+                          const next = { ...prev };
+                          if (cur.length) next[f.key] = cur;
+                          else delete next[f.key];
+                          return next;
+                        })
+                      }
+                      className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                        on
+                          ? "border-primary bg-primary text-white"
+                          : "border-line bg-white text-ink-soft hover:border-primary"
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          // Filtro de selección simple
           return (
             <select
               key={f.key}
-              value={filters[f.key] ?? ""}
+              value={(filters[f.key] as string) ?? ""}
               onChange={(e) =>
                 setFilters((prev) => {
                   const next = { ...prev };
@@ -303,6 +377,20 @@ function Cell({ col, value }: { col: Col; value: unknown }) {
   }
   if (col.key === "reconsignado") {
     return <td className={base}>{value ? "Sí" : "No"}</td>;
+  }
+  if (col.key === "statusFactura") {
+    const ok = value === "SUCCESS";
+    return (
+      <td className={base}>
+        <span
+          className={`rounded-md px-2 py-1 text-xs font-bold ${
+            ok ? "bg-success/15 text-success" : "bg-warning/20 text-warning"
+          }`}
+        >
+          {String(value ?? "")}
+        </span>
+      </td>
+    );
   }
   return <td className={base}>{value == null ? "" : String(value)}</td>;
 }

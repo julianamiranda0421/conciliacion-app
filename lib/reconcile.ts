@@ -19,11 +19,16 @@ export type Conciliado = {
   diferencia: number;
   biaCreditos: number;
   totalFactura: number;
+  descripcion: string;
   fechaBanco: string;
   fechaPago: string;
   sucursal: string;
   tipo: string;
   nivelMatch: "ALTO" | "MEDIO";
+  // Enriquecidos desde bills_360 (se llenan en la página, por transaction_id):
+  periodoFactura?: string;
+  valorFactura?: number;
+  statusFactura?: string;
 };
 
 export type BancoSinTxn = {
@@ -79,6 +84,8 @@ export type ReconResult = {
     nCritico: number;
     descuadre: number;
     diferenciaValor: number;
+    totalIngresoBanco: number;
+    totalDevValor: number;
   };
 };
 
@@ -154,6 +161,7 @@ export function reconcile(
       diferencia: t.amount - elegido.valor,
       biaCreditos: t.biaCreditsUsed,
       totalFactura: t.amount + t.biaCreditsUsed,
+      descripcion: elegido.descripcion,
       fechaBanco: elegido.fecha,
       fechaPago: t.paymentDate,
       sucursal: elegido.sucursal,
@@ -207,6 +215,8 @@ export function reconcile(
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
   const totalTsb = txnSinBanco.reduce((s, t) => s + t.valorAplicado, 0);
+  const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+  const totalDevValor = devAnalisis.reduce((s, d) => s + d.valor, 0);
 
   return {
     conciliado,
@@ -226,6 +236,8 @@ export function reconcile(
       nCritico: devAnalisis.filter((d) => d.riesgo.startsWith("CRITICO")).length,
       descuadre: conciliado.filter((c) => c.diferencia !== 0).length,
       diferenciaValor: conciliado.reduce((s, c) => s + Math.abs(c.diferencia), 0),
+      totalIngresoBanco,
+      totalDevValor,
     },
   };
 }
@@ -356,6 +368,7 @@ export function reconcileAch(
       diferencia: 0,
       biaCreditos: f.biaCreditsUsed,
       totalFactura: f.amount + f.biaCreditsUsed,
+      descripcion: dep.descripcion,
       fechaBanco: dep.fecha,
       fechaPago: f.paymentDate,
       sucursal: dep.cliente,
@@ -383,6 +396,7 @@ export function reconcileAch(
 
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
+  const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
 
   return {
     conciliado,
@@ -402,6 +416,8 @@ export function reconcileAch(
       nCritico: 0,
       descuadre: conciliado.filter((c) => c.diferencia !== 0).length,
       diferenciaValor: conciliado.reduce((s, c) => s + Math.abs(c.diferencia), 0),
+      totalIngresoBanco,
+      totalDevValor: 0,
     },
   };
 }

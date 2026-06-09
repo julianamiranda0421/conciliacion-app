@@ -456,6 +456,35 @@ export async function listBankPeriods(): Promise<string[]> {
   return [...new Set((data ?? []).map((r) => (r as { period: string }).period))];
 }
 
+// Datos de factura (bills_360) para enriquecer el detalle de conciliación,
+// buscados por transaction_id. Una transacción puede pagar varias facturas;
+// se devuelven todas y la página elige la que cuadra por bill_id.
+export type Bill360Mini = {
+  transaction_id: number;
+  bill_id: number;
+  period: string | null;
+  total: number | null;
+  bill_status: string | null;
+  is_partial_payment: boolean | null;
+};
+
+export async function getBills360ForTxns(txnIds: number[]): Promise<Bill360Mini[]> {
+  if (txnIds.length === 0) return [];
+  const sb = getSupabase();
+  const out: Bill360Mini[] = [];
+  const size = 300;
+  for (let i = 0; i < txnIds.length; i += size) {
+    const chunk = txnIds.slice(i, i + size);
+    const { data, error } = await sb
+      .from("bills_360")
+      .select("transaction_id,bill_id,period,total,bill_status,is_partial_payment")
+      .in("transaction_id", chunk);
+    if (error) throw new Error(`getBills360ForTxns: ${error.message}`);
+    out.push(...((data ?? []) as Bill360Mini[]));
+  }
+  return out;
+}
+
 export type CajaConciliada = {
   ingresoBanco: number;
   aplicado: number;
