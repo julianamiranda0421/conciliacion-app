@@ -55,10 +55,10 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     id: "davivienda-7772",
     bank: "Davivienda",
     accountNumber: "7772",
-    alias: "Davivienda 7772",
-    type: "general",
+    alias: "Davivienda 7772 · Recaudo cheque / tarjeta / PSE",
+    type: "recaudo",
     format: "excel",
-    enabled: false,
+    enabled: true,
   },
   {
     id: "adquirencias",
