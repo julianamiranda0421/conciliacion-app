@@ -55,6 +55,7 @@ export type Movimiento = {
   descripcion: string;
   sucursal: string;
   valor: number;
+  tran: string; // "Nota Crédito" (ingreso) | "Nota Débito" (egreso), según el signo
 };
 
 export type DevAnalisis = {
@@ -224,6 +225,7 @@ export function reconcile(
     descripcion: m.descripcion,
     sucursal: m.sucursal,
     valor: m.valor,
+    tran: m.valor < 0 ? "Nota Débito" : "Nota Crédito",
   }));
 
   // Partidas conciliatorias pendientes (centralizado): recaudos sin cruzar,
@@ -442,22 +444,34 @@ export function reconcileAch(
     descripcion: m.descripcion,
     sucursal: m.sucursal,
     valor: m.valor,
+    tran: m.valor < 0 ? "Nota Débito" : "Nota Crédito",
   }));
 
-  const pendientes: Pendiente[] = bancoSinTxn.map((b) => ({
-    fecha: b.fechaBanco,
-    concepto: b.descripcion,
-    punto: b.sucursal,
-    billId: b.billId,
-    valor: b.valorBanco,
-    status: "Abono sin aplicar",
-  }));
+  // Firma para identificar los depósitos de recaudo que SÍ cruzaron (conciliados).
+  const sig = (m: { fecha: string; descripcion: string; valor: number; documento: string }) =>
+    `${m.fecha}|${m.descripcion}|${m.valor}|${m.documento}`;
+  const matchedSig = new Set<string>();
+  depositos.forEach((dep, i) => {
+    if (asignado[i]) matchedSig.add(sig(dep));
+  });
+
+  // Pendiente por conciliar = todos los INGRESOS (notas crédito = positivos) que no
+  // son recaudo ya conciliado. Los egresos (notas débito, negativos) no aplican.
+  const pendientes: Pendiente[] = banco
+    .filter((m) => m.valor > 0 && !matchedSig.has(sig(m)))
+    .map((m) => ({
+      fecha: m.fecha,
+      concepto: m.descripcion,
+      punto: m.sucursal,
+      billId: m.billId,
+      valor: m.valor,
+      status: config.matchDeposit(m.descripcion) ? "Abono sin aplicar" : "Ingreso sin conciliar",
+    }));
 
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
-  // Ingreso al banco para cuentas ACH = SOLO el recaudo (depósitos de los clientes
-  // configurados), no todos los positivos del extracto operativo.
-  const totalIngresoBanco = depositos.reduce((s, d) => s + d.valor, 0);
+  // Ingreso al banco = TODO lo que ingresó (notas crédito = positivos), sea recaudo o no.
+  const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
   const totalPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
 
   return {

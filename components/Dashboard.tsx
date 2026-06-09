@@ -60,6 +60,7 @@ const TABS: TabDef[] = [
     id: "movimientos",
     label: "🏦 Movimientos bancarios",
     filters: [
+      { key: "tran", label: "Tran", type: "select" },
       { key: "descripcion", label: "Concepto", type: "select" },
       { key: "fecha", label: "Fecha de ingreso", type: "select" },
     ],
@@ -67,6 +68,7 @@ const TABS: TabDef[] = [
       { key: "fecha", label: "Fecha" },
       { key: "descripcion", label: "Concepto" },
       { key: "sucursal", label: "Canal" },
+      { key: "tran", label: "Tran" },
       { key: "valor", label: "Valor", num: true },
     ],
   },
