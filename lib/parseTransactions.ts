@@ -88,6 +88,15 @@ export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction
     case "bancolombia-1144":
       // Pagos manuales (tienen comprobante S3); se agrupan por S3 en el motor.
       return rows.filter((r) => r.s3PathDocument !== "").map(map);
+    case "davivienda-7772":
+      // Recaudo físico/cheque por Davivienda (cruce por factura, igual que 8465).
+      return rows
+        .filter(
+          (r) =>
+            r.paymentMethodName.includes("Davivienda") &&
+            r.paymentMethodType === "PHYSICAL",
+        )
+        .map(map);
     default:
       return [];
   }

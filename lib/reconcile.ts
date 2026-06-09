@@ -10,6 +10,17 @@ const CONCEPTOS_RECAUDO = [
   "RECAUDO VALIDACION CHEQUE",
 ];
 
+// Config de la conciliación de recaudo físico/cheque (match por factura, valor
+// confirma). Por defecto = Bancolombia 8465 (concepto recaudo + factura en ref1).
+export type ChequeConfig = {
+  conceptos: string[];
+  billOf: (m: BankMovement) => string;
+};
+const DEFAULT_CHEQUE: ChequeConfig = {
+  conceptos: CONCEPTOS_RECAUDO,
+  billOf: (m) => m.billId,
+};
+
 export type Conciliado = {
   transactionId: number;
   billIdTxn: string;
@@ -131,10 +142,11 @@ export function reconcile(
   banco: BankMovement[],
   txns: Transaction[],
   periodo: string,
+  cfg: ChequeConfig = DEFAULT_CHEQUE,
 ): ReconResult {
   const recaudos = banco
-    .filter((m) => CONCEPTOS_RECAUDO.includes(m.descripcion))
-    .map((m, i) => ({ ...m, _i: i, usado: false }));
+    .filter((m) => cfg.conceptos.includes(m.descripcion))
+    .map((m, i) => ({ ...m, _i: i, usado: false, bill: cfg.billOf(m) }));
 
   const dev = banco.filter((m) => m.descripcion.startsWith("DEV CHEQUE"));
 
@@ -143,7 +155,7 @@ export function reconcile(
 
   for (const t of txns) {
     const disponibles = recaudos.filter((r) => !r.usado);
-    const porFactura = disponibles.filter((r) => r.billId === t.billId);
+    const porFactura = disponibles.filter((r) => r.bill === t.billId);
 
     let elegido: (typeof recaudos)[number] | undefined;
     let nivel: "ALTO" | "MEDIO";
@@ -168,7 +180,7 @@ export function reconcile(
         });
         continue;
       }
-      const compat = porValor.filter((r) => billCompatible(r.billId, t.billId));
+      const compat = porValor.filter((r) => billCompatible(r.bill, t.billId));
       const pool = compat.length ? compat : porValor;
       elegido = [...pool].sort(
         (a, b) => dayDist(a.fecha, t.paymentDate) - dayDist(b.fecha, t.paymentDate),
@@ -180,7 +192,7 @@ export function reconcile(
     conciliado.push({
       transactionId: t.transactionId,
       billIdTxn: t.billId,
-      billIdBanco: elegido.billId,
+      billIdBanco: elegido.bill,
       valorBanco: elegido.valor,
       valorAplicado: t.amount,
       diferencia: t.amount - elegido.valor,
@@ -203,7 +215,7 @@ export function reconcile(
       fechaBanco: r.fecha,
       descripcion: r.descripcion,
       sucursal: r.sucursal,
-      billId: r.billId,
+      billId: r.bill,
       documento: r.documento,
       valorBanco: r.valor,
       nota: devValores.has(r.valor)
@@ -527,6 +539,16 @@ export function reconcileAch(
 }
 
 // Dispatcher por cuenta
+// Recaudo físico/cheque por cuenta cuando NO es Bancolombia 8465.
+const CHEQUE_CONFIG: Record<string, ChequeConfig> = {
+  // Davivienda 7772: recaudo físico/cheque. Conceptos del extracto y la factura
+  // va en Referencia 1 (parser la deja en ref2, con ceros a la izquierda).
+  "davivienda-7772": {
+    conceptos: ["Deposito Efectivo en Oficina", "Ajuste pago BIA ENERGY REC FACTURAS"],
+    billOf: (m) => m.ref2.replace(/^0+/, ""),
+  },
+};
+
 export function reconcileForAccount(
   accountId: string,
   banco: BankMovement[],
@@ -536,5 +558,7 @@ export function reconcileForAccount(
 ): ReconResult {
   const ach = ACH_CONFIG[accountId];
   if (ach) return reconcileAch(banco, txns, periodo, ach, flags);
+  const chq = CHEQUE_CONFIG[accountId];
+  if (chq) return reconcile(banco, txns, periodo, chq);
   return reconcile(banco, txns, periodo);
 }
