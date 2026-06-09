@@ -3,8 +3,14 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Quita BOM (U+FEFF) y espacios/saltos. Si la variable en Vercel se guardó con un
+// BOM al inicio, la librería revienta al ponerlo en un header HTTP
+// ("Cannot convert argument to a ByteString ... value of 65279").
+const cleanEnv = (v: string | undefined) =>
+  v?.replace(/^﻿/, "").trim() || undefined;
+
+const url = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+const serviceKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export function getSupabase() {
   if (!url || !serviceKey) {
