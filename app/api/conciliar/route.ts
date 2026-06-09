@@ -9,6 +9,7 @@ import {
   saveBankMovements,
   saveCrossings,
   recordLoad,
+  enrichConciliado,
   type TxnDbRow,
 } from "@/lib/db";
 
@@ -94,6 +95,8 @@ export async function POST(req: Request) {
       rowCount: banco.length,
     });
 
+    // Enriquecer el conciliado (período/valor/status de factura) para el preview.
+    result.conciliado = await enrichConciliado(result.conciliado, periodo, accountId);
     return NextResponse.json(result);
   } catch (err) {
     console.error("Error en conciliación:", err);

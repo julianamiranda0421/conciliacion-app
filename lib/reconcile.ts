@@ -15,6 +15,10 @@ const CONCEPTOS_RECAUDO = [
 export type ChequeConfig = {
   conceptos: string[];
   billOf: (m: BankMovement) => string;
+  // Si true: el recaudo se aplica por VARIOS métodos de pago, así que se cruza
+  // contra cualquier transacción cuya factura aparezca en el recaudo del banco
+  // (no se restringe por método). Útil para Davivienda 7772.
+  restrictTxnsToRecaudoBills?: boolean;
 };
 const DEFAULT_CHEQUE: ChequeConfig = {
   conceptos: CONCEPTOS_RECAUDO,
@@ -153,7 +157,14 @@ export function reconcile(
   const conciliado: Conciliado[] = [];
   const txnSinBanco: TxnSinBanco[] = [];
 
-  for (const t of txns) {
+  // Cuando el recaudo se aplica por varios métodos (7772), solo se consideran las
+  // transacciones cuya factura aparece en el recaudo del banco (match por factura).
+  const recaudoBills = new Set(recaudos.map((r) => r.bill));
+  const txnsToMatch = cfg.restrictTxnsToRecaudoBills
+    ? txns.filter((t) => recaudoBills.has(t.billId))
+    : txns;
+
+  for (const t of txnsToMatch) {
     const disponibles = recaudos.filter((r) => !r.usado);
     const porFactura = disponibles.filter((r) => r.bill === t.billId);
 
@@ -546,6 +557,7 @@ const CHEQUE_CONFIG: Record<string, ChequeConfig> = {
   "davivienda-7772": {
     conceptos: ["Deposito Efectivo en Oficina", "Ajuste pago BIA ENERGY REC FACTURAS"],
     billOf: (m) => m.ref2.replace(/^0+/, ""),
+    restrictTxnsToRecaudoBills: true,
   },
 };
 

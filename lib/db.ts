@@ -549,6 +549,38 @@ export type Bill360Mini = {
   is_partial_payment: boolean | null;
 };
 
+// Enriquece las partidas conciliadas con datos de la factura (bills_360) y la
+// observación manual. Se usa en la página de conciliación y en /api/conciliar
+// (para que el preview del wizard también muestre período/valor/status).
+export async function enrichConciliado(
+  conciliado: Conciliado[],
+  period: string,
+  accountId: string,
+): Promise<Conciliado[]> {
+  const txnIds = [...new Set(conciliado.map((c) => c.transactionId).filter((n) => n > 0))];
+  const [minis, obs] = await Promise.all([
+    getBills360ForTxns(txnIds),
+    getObservations(period, accountId),
+  ]);
+  const byTxn = new Map<number, Bill360Mini[]>();
+  for (const m of minis) {
+    const arr = byTxn.get(m.transaction_id) ?? [];
+    arr.push(m);
+    byTxn.set(m.transaction_id, arr);
+  }
+  return conciliado.map((c) => {
+    const cands = byTxn.get(c.transactionId) ?? [];
+    const m = cands.find((x) => String(x.bill_id) === c.billIdTxn) ?? cands[0];
+    return {
+      ...c,
+      periodoFactura: m?.period ?? "—",
+      valorFactura: m?.total != null ? Number(m.total) : c.totalFactura,
+      statusFactura: m ? (m.is_partial_payment ? m.bill_status ?? "PARCIAL" : "SUCCESS") : "SUCCESS",
+      observacion: obs[String(c.transactionId)] ?? "",
+    };
+  });
+}
+
 export async function getBills360ForTxns(txnIds: number[]): Promise<Bill360Mini[]> {
   if (txnIds.length === 0) return [];
   const sb = getSupabase();

@@ -4,7 +4,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getBills360ForTxns, getMovementFlags, getObservations } from "@/lib/db";
+import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
 
 export const dynamic = "force-dynamic";
@@ -95,37 +95,10 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
   );
   const result = reconcileForAccount(accountId, banco, txns, period, flags);
 
-  // Enriquecer el detalle conciliado con datos de la factura (bills_360):
-  // período de factura, valor de factura y status de factura.
-  const txnIds = [...new Set(result.conciliado.map((c) => c.transactionId).filter((n) => n > 0))];
-  const [minis, obs] = await Promise.all([
-    getBills360ForTxns(txnIds),
-    getObservations(period, accountId),
-  ]);
-  const byTxn = new Map<number, typeof minis>();
-  for (const m of minis) {
-    const arr = byTxn.get(m.transaction_id) ?? [];
-    arr.push(m);
-    byTxn.set(m.transaction_id, arr);
-  }
+  // Enriquecer el detalle conciliado con datos de la factura (bills_360) y notas.
   const enriched = {
     ...result,
-    conciliado: result.conciliado.map((c) => {
-      const cands = byTxn.get(c.transactionId) ?? [];
-      const m = cands.find((x) => String(x.bill_id) === c.billIdTxn) ?? cands[0];
-      return {
-        ...c,
-        periodoFactura: m?.period ?? "—",
-        valorFactura: m?.total != null ? Number(m.total) : c.totalFactura,
-        // Pagada totalmente -> SUCCESS; pago parcial -> estado real de la factura.
-        statusFactura: m
-          ? m.is_partial_payment
-            ? m.bill_status ?? "PARCIAL"
-            : "SUCCESS"
-          : "SUCCESS",
-        observacion: obs[String(c.transactionId)] ?? "",
-      };
-    }),
+    conciliado: await enrichConciliado(result.conciliado, period, accountId),
   };
 
   return <Dashboard result={enriched} accountId={accountId} period={period} />;

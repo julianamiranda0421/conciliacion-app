@@ -89,14 +89,10 @@ export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction
       // Pagos manuales (tienen comprobante S3); se agrupan por S3 en el motor.
       return rows.filter((r) => r.s3PathDocument !== "").map(map);
     case "davivienda-7772":
-      // Recaudo físico/cheque por Davivienda (cruce por factura, igual que 8465).
-      return rows
-        .filter(
-          (r) =>
-            r.paymentMethodName.includes("Davivienda") &&
-            r.paymentMethodType === "PHYSICAL",
-        )
-        .map(map);
+      // El recaudo de 7772 (cheque/físico) se aplica por varios métodos de pago,
+      // así que se pasan TODAS las transacciones y el motor cruza por factura
+      // (restrictTxnsToRecaudoBills) contra el recaudo del banco.
+      return rows.map(map);
     default:
       return [];
   }
