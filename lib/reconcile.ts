@@ -77,13 +77,22 @@ export type Pendiente = {
   valor: number; // con signo del banco (los cheques devueltos van negativos)
   status: string; // "Cheque devuelto" | "Pago no aplicado" | "Recaudo sin cruzar" | ...
   transactionId?: number;
+  sig?: string; // firma del movimiento (para clasificación manual recaudo)
+  manual?: boolean; // true si fue marcado como recaudo a mano (se puede borrar)
 };
+
+// Firma estable de un movimiento bancario para clasificación manual persistente.
+export function movementSig(m: BankMovement): string {
+  return [m.fecha, m.descripcion, m.valor, m.documento, m.ref2].join("|");
+}
 
 export type ReconResult = {
   conciliado: Conciliado[];
   bancoSinTxn: BancoSinTxn[];
   txnSinBanco: TxnSinBanco[];
   pendientes: Pendiente[];
+  recaudoPendiente?: Pendiente[]; // cuentas ACH: recaudo sin cruzar (auto + manual)
+  otrosIngresos?: Pendiente[]; // cuentas ACH: ingresos que no son recaudo
   movimientos: Movimiento[];
   dev: DevAnalisis[];
   resumen: {
@@ -340,6 +349,7 @@ export function reconcileAch(
   txns: Transaction[],
   periodo: string,
   config: AchConfig,
+  flags?: Set<string>,
 ): ReconResult {
   // Depósitos ACH relevantes para esta cuenta
   const depositos = banco
@@ -447,38 +457,53 @@ export function reconcileAch(
     tran: m.valor < 0 ? "Nota Débito" : "Nota Crédito",
   }));
 
-  // Firma para identificar los depósitos de recaudo que SÍ cruzaron (conciliados).
-  const sig = (m: { fecha: string; descripcion: string; valor: number; documento: string }) =>
-    `${m.fecha}|${m.descripcion}|${m.valor}|${m.documento}`;
+  // Firma de los depósitos de recaudo que SÍ cruzaron (ya conciliados).
   const matchedSig = new Set<string>();
   depositos.forEach((dep, i) => {
-    if (asignado[i]) matchedSig.add(sig(dep));
+    if (asignado[i]) matchedSig.add(movementSig(dep));
   });
 
-  // Pendiente por conciliar = todos los INGRESOS (notas crédito = positivos) que no
-  // son recaudo ya conciliado. Los egresos (notas débito, negativos) no aplican.
-  const pendientes: Pendiente[] = banco
-    .filter((m) => m.valor > 0 && !matchedSig.has(sig(m)))
-    .map((m) => ({
+  // Repartir los INGRESOS (notas crédito = positivos) no conciliados en dos grupos:
+  //  - recaudoPendiente: recaudo (auto por concepto, o marcado a mano) que no cruzó.
+  //  - otrosIngresos: ingresos que no son recaudo.
+  const flagsSet = flags ?? new Set<string>();
+  const recaudoPendiente: Pendiente[] = [];
+  const otrosIngresos: Pendiente[] = [];
+  for (const m of banco) {
+    if (m.valor <= 0) continue; // los egresos (notas débito) no aplican
+    const s = movementSig(m);
+    if (matchedSig.has(s)) continue; // ya conciliado
+    const esRecaudoAuto = config.matchDeposit(m.descripcion);
+    const esRecaudoManual = flagsSet.has(s);
+    const esRecaudo = esRecaudoAuto || esRecaudoManual;
+    const row: Pendiente = {
       fecha: m.fecha,
       concepto: m.descripcion,
       punto: m.sucursal,
       billId: m.billId,
       valor: m.valor,
-      status: config.matchDeposit(m.descripcion) ? "Partida conciliatoria" : "Ok",
-    }));
+      status: esRecaudo ? "Partida conciliatoria" : "Ok",
+      sig: s,
+      manual: esRecaudoManual && !esRecaudoAuto,
+    };
+    if (esRecaudo) recaudoPendiente.push(row);
+    else otrosIngresos.push(row);
+  }
 
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
   // Ingreso al banco = TODO lo que ingresó (notas crédito = positivos), sea recaudo o no.
   const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
-  const totalPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
+  // Pendiente por conciliar = SOLO el recaudo pendiente (auto + marcado a mano).
+  const totalPendiente = recaudoPendiente.reduce((s, p) => s + p.valor, 0);
 
   return {
     conciliado,
     bancoSinTxn,
     txnSinBanco: [],
-    pendientes,
+    pendientes: recaudoPendiente,
+    recaudoPendiente,
+    otrosIngresos,
     movimientos,
     dev: [],
     resumen: {
@@ -506,8 +531,9 @@ export function reconcileForAccount(
   banco: BankMovement[],
   txns: Transaction[],
   periodo: string,
+  flags?: Set<string>,
 ): ReconResult {
   const ach = ACH_CONFIG[accountId];
-  if (ach) return reconcileAch(banco, txns, periodo, ach);
+  if (ach) return reconcileAch(banco, txns, periodo, ach, flags);
   return reconcile(banco, txns, periodo);
 }

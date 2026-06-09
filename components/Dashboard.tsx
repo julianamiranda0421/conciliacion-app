@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import type { ReconResult } from "@/lib/reconcile";
 
 const money = (v: unknown) =>
@@ -18,84 +20,147 @@ type TabDef = {
   filters?: FilterDef[];
 };
 
-const TABS: TabDef[] = [
-  {
-    id: "conciliado",
-    label: "✅ Conciliado",
-    filters: [
-      { key: "billIdTxn", label: "Factura", type: "text" },
-      { key: "tipo", label: "Tipo", type: "select" },
-      { key: "statusFactura", label: "Status factura", type: "multi" },
-    ],
-    cols: [
-      { key: "transactionId", label: "TransacciónID" },
-      { key: "billIdTxn", label: "Factura" },
-      { key: "billIdBanco", label: "Factura Banco" },
-      { key: "periodoFactura", label: "Período factura" },
-      { key: "descripcion", label: "Descripción" },
-      { key: "valorFactura", label: "Valor factura", num: true },
-      { key: "valorBanco", label: "Valor banco", num: true },
-      { key: "valorAplicado", label: "Valor aplicado", num: true },
-      { key: "biaCreditos", label: "Bia créditos", num: true },
-      { key: "diferencia", label: "Diferencia", num: true },
-      { key: "fechaBanco", label: "Fecha banco" },
-      { key: "tipo", label: "Tipo" },
-      { key: "statusFactura", label: "Status factura" },
-    ],
-  },
-  {
-    id: "pendientes",
-    label: "🟠 Partidas Conciliatorias Pendientes",
-    filters: [{ key: "status", label: "Status", type: "select" }],
-    cols: [
-      { key: "fecha", label: "Fecha" },
-      { key: "concepto", label: "Concepto" },
-      { key: "punto", label: "Punto" },
-      { key: "billId", label: "Factura" },
-      { key: "valor", label: "Valor", num: true },
-      { key: "status", label: "Status" },
-    ],
-  },
-  {
-    id: "movimientos",
-    label: "🏦 Movimientos bancarios",
-    filters: [
-      { key: "tran", label: "Tran", type: "select" },
-      { key: "descripcion", label: "Concepto", type: "select" },
-      { key: "fecha", label: "Fecha de ingreso", type: "select" },
-    ],
-    cols: [
-      { key: "fecha", label: "Fecha" },
-      { key: "descripcion", label: "Concepto" },
-      { key: "sucursal", label: "Canal" },
-      { key: "tran", label: "Tran" },
-      { key: "valor", label: "Valor", num: true },
-    ],
-  },
-  {
-    id: "dev",
-    label: "🚨 Cheques devueltos",
-    cols: [
-      { key: "fechaDev", label: "Fecha DEV" },
-      { key: "documento", label: "Documento" },
-      { key: "valor", label: "Valor", num: true },
-      { key: "facturasAsociadas", label: "Facturas" },
-      { key: "reconsignado", label: "Reconsignado" },
-      { key: "riesgo", label: "Riesgo" },
-    ],
-  },
-];
+const TAB_CONCILIADO: TabDef = {
+  id: "conciliado",
+  label: "✅ Conciliado",
+  filters: [
+    { key: "billIdTxn", label: "Factura", type: "text" },
+    { key: "tipo", label: "Tipo", type: "select" },
+    { key: "statusFactura", label: "Status factura", type: "multi" },
+  ],
+  cols: [
+    { key: "transactionId", label: "TransacciónID" },
+    { key: "billIdTxn", label: "Factura" },
+    { key: "billIdBanco", label: "Factura Banco" },
+    { key: "periodoFactura", label: "Período factura" },
+    { key: "descripcion", label: "Descripción" },
+    { key: "valorFactura", label: "Valor factura", num: true },
+    { key: "valorBanco", label: "Valor banco", num: true },
+    { key: "valorAplicado", label: "Valor aplicado", num: true },
+    { key: "biaCreditos", label: "Bia créditos", num: true },
+    { key: "diferencia", label: "Diferencia", num: true },
+    { key: "fechaBanco", label: "Fecha banco" },
+    { key: "tipo", label: "Tipo" },
+    { key: "statusFactura", label: "Status factura" },
+  ],
+};
 
-export function Dashboard({ result }: { result: ReconResult }) {
+// 8465 (recaudo PDF)
+const TAB_PENDIENTES: TabDef = {
+  id: "pendientes",
+  label: "🟠 Partidas Conciliatorias Pendientes",
+  filters: [{ key: "status", label: "Status", type: "select" }],
+  cols: [
+    { key: "fecha", label: "Fecha" },
+    { key: "concepto", label: "Concepto" },
+    { key: "punto", label: "Punto" },
+    { key: "billId", label: "Factura" },
+    { key: "valor", label: "Valor", num: true },
+    { key: "status", label: "Status" },
+  ],
+};
+const TAB_DEV: TabDef = {
+  id: "dev",
+  label: "🚨 Cheques devueltos",
+  cols: [
+    { key: "fechaDev", label: "Fecha DEV" },
+    { key: "documento", label: "Documento" },
+    { key: "valor", label: "Valor", num: true },
+    { key: "facturasAsociadas", label: "Facturas" },
+    { key: "reconsignado", label: "Reconsignado" },
+    { key: "riesgo", label: "Riesgo" },
+  ],
+};
+
+// Cuentas ACH (Davivienda, 1800, 1144): clasificación manual recaudo / otros
+const TAB_RECAUDO: TabDef = {
+  id: "recaudoPendiente",
+  label: "💧 Partidas conciliatorias recaudo",
+  cols: [
+    { key: "fecha", label: "Fecha" },
+    { key: "concepto", label: "Concepto" },
+    { key: "punto", label: "Punto" },
+    { key: "billId", label: "Factura" },
+    { key: "valor", label: "Valor", num: true },
+    { key: "accion", label: "Acción" },
+  ],
+};
+const TAB_OTROS: TabDef = {
+  id: "otrosIngresos",
+  label: "📥 Otros ingresos",
+  filters: [{ key: "concepto", label: "Concepto", type: "select" }],
+  cols: [
+    { key: "fecha", label: "Fecha" },
+    { key: "concepto", label: "Concepto" },
+    { key: "punto", label: "Punto" },
+    { key: "valor", label: "Valor", num: true },
+    { key: "status", label: "Status" },
+  ],
+};
+
+const TAB_MOV: TabDef = {
+  id: "movimientos",
+  label: "🏦 Movimientos bancarios",
+  filters: [
+    { key: "tran", label: "Tran", type: "select" },
+    { key: "descripcion", label: "Concepto", type: "select" },
+    { key: "fecha", label: "Fecha de ingreso", type: "select" },
+  ],
+  cols: [
+    { key: "fecha", label: "Fecha" },
+    { key: "descripcion", label: "Concepto" },
+    { key: "sucursal", label: "Canal" },
+    { key: "tran", label: "Tran" },
+    { key: "valor", label: "Valor", num: true },
+  ],
+};
+
+export function Dashboard({
+  result,
+  accountId,
+  period,
+}: {
+  result: ReconResult;
+  accountId: string;
+  period: string;
+}) {
+  const router = useRouter();
+  const isAch = Array.isArray(result.otrosIngresos);
+  const TABS = isAch
+    ? [TAB_CONCILIADO, TAB_RECAUDO, TAB_OTROS, TAB_MOV]
+    : [TAB_CONCILIADO, TAB_PENDIENTES, TAB_DEV, TAB_MOV];
+
   const [current, setCurrent] = useState<keyof ReconResult>("conciliado");
   const [filters, setFilters] = useState<Record<string, string | string[]>>({});
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const tab = TABS.find((t) => t.id === current)!;
-  const rawRows = (result[current] as Record<string, unknown>[]) ?? [];
+  const tab = TABS.find((t) => t.id === current) ?? TABS[0];
+  const rawRows = (result[tab.id] as Record<string, unknown>[]) ?? [];
   const filterType = (key: string): FilterType =>
     tab.filters?.find((f) => f.key === key)?.type ?? "select";
+
+  // Marcar (on=true) o desmarcar (on=false) un movimiento como recaudo.
+  async function setRecaudo(sig: string, on: boolean) {
+    if (!sig) return;
+    setBusy(sig);
+    try {
+      const res = await fetch("/api/movement-flags", {
+        method: on ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period, accountId, sig }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? "No se pudo guardar la clasificación");
+      } else {
+        router.refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const rows = useMemo(() => {
     let r = rawRows.filter((row) => {
@@ -131,10 +196,10 @@ export function Dashboard({ result }: { result: ReconResult }) {
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
   const kpis = [
-    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: k.totalDevValor > 0 ? "neto (− cheques devueltos)" : "recaudo recibido", bar: pctConc },
+    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: k.totalDevValor > 0 ? "neto (− cheques devueltos)" : "todos los ingresos", bar: pctConc },
     { cls: "ok", lbl: "Total ingreso conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso` },
     { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
-    { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por conciliar", val: money(k.totalPendiente), sub: "ingreso al banco − conciliado" },
+    { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "ingreso al banco − conciliado" },
   ];
 
   const valClass = (cls: string) =>
@@ -162,7 +227,7 @@ export function Dashboard({ result }: { result: ReconResult }) {
       <div className="mt-6 flex flex-wrap gap-2">
         {TABS.map((t) => {
           const n = (result[t.id] as unknown[])?.length ?? 0;
-          const active = t.id === current;
+          const active = t.id === tab.id;
           return (
             <button
               key={t.id}
@@ -190,7 +255,6 @@ export function Dashboard({ result }: { result: ReconResult }) {
             .map(String)
             .sort();
 
-          // Filtro de texto (contiene)
           if (f.type === "text") {
             return (
               <input
@@ -210,7 +274,6 @@ export function Dashboard({ result }: { result: ReconResult }) {
             );
           }
 
-          // Filtro multi-selección (chips)
           if (f.type === "multi") {
             const sel = (filters[f.key] as string[]) ?? [];
             return (
@@ -247,7 +310,6 @@ export function Dashboard({ result }: { result: ReconResult }) {
             );
           }
 
-          // Filtro de selección simple
           return (
             <select
               key={f.key}
@@ -274,12 +336,17 @@ export function Dashboard({ result }: { result: ReconResult }) {
         <span className="ml-auto text-sm text-ink-soft">{rows.length} filas</span>
       </div>
 
-      {current === "dev" && rows.length > 0 && (
+      {tab.id === "dev" && rows.length > 0 && (
         <div className="mt-3 rounded-md border border-error bg-error/5 px-4 py-3 text-sm">
           🚨 <b>{rows.length} cheque(s) devuelto(s)</b>.{" "}
           {result.dev.filter((d) => d.riesgo.startsWith("CRITICO")).length} con riesgo CRÍTICO
           (factura marcada como pagada pero el dinero no entró). Revisar cada caso.
         </div>
+      )}
+      {tab.id === "otrosIngresos" && (
+        <p className="mt-3 text-xs text-ink-soft">
+          Marca en <b>Status</b> las partidas que sean recaudo; pasarán a “Partidas conciliatorias recaudo”.
+        </p>
       )}
 
       {/* Tabla */}
@@ -311,13 +378,54 @@ export function Dashboard({ result }: { result: ReconResult }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-primary-light/40">
-                    {tab.cols.map((c) => (
-                      <Cell key={c.key} col={c} value={row[c.key]} />
-                    ))}
-                  </tr>
-                ))}
+                {rows.map((row, i) => {
+                  const sig = String(row.sig ?? "");
+                  const rowBusy = busy === sig && sig !== "";
+                  return (
+                    <tr key={i} className="hover:bg-primary-light/40">
+                      {tab.cols.map((c) => {
+                        // Otros ingresos: status = selector Ok / Partida de recaudo
+                        if (tab.id === "otrosIngresos" && c.key === "status") {
+                          return (
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                              <select
+                                value="ok"
+                                disabled={rowBusy}
+                                onChange={(e) => {
+                                  if (e.target.value === "recaudo") setRecaudo(sig, true);
+                                }}
+                                className="h-8 rounded-md border border-line bg-white px-2 text-xs disabled:opacity-50"
+                              >
+                                <option value="ok">Ok</option>
+                                <option value="recaudo">Partida de recaudo</option>
+                              </select>
+                            </td>
+                          );
+                        }
+                        // Recaudo: acción = borrar (solo las marcadas a mano)
+                        if (tab.id === "recaudoPendiente" && c.key === "accion") {
+                          return (
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                              {row.manual ? (
+                                <button
+                                  onClick={() => setRecaudo(sig, false)}
+                                  disabled={rowBusy}
+                                  className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-error transition hover:bg-error/5 disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Borrar
+                                </button>
+                              ) : (
+                                <span className="text-xs text-ink-soft">auto</span>
+                              )}
+                            </td>
+                          );
+                        }
+                        return <Cell key={c.key} col={c} value={row[c.key]} />;
+                      })}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -98,6 +98,20 @@ create table if not exists bills_360 (
   s3_path_document     text,
   synced_at            timestamptz default now()
 );
+-- Clasificación manual de movimientos: marcar un ingreso como "recaudo".
+-- Clave por FIRMA del movimiento (sobrevive a re-cargas del extracto, donde los
+-- ids de bank_movements cambian). Si existe fila => el movimiento es recaudo.
+create table if not exists movement_flags (
+  id          bigserial primary key,
+  period      text not null,
+  account_id  text not null,
+  sig         text not null,
+  es_recaudo  boolean not null default true,
+  updated_at  timestamptz default now(),
+  unique(period, account_id, sig)
+);
+create index if not exists idx_mflags_period_acct on movement_flags(period, account_id);
+
 create index if not exists idx_b360_bill on bills_360(bill_id);
 create index if not exists idx_b360_period on bills_360(period);
 create index if not exists idx_b360_company on bills_360(company_id);

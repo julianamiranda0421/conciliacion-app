@@ -4,7 +4,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getBills360ForTxns } from "@/lib/db";
+import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getBills360ForTxns, getMovementFlags } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
 
 export const dynamic = "force-dynamic";
@@ -70,10 +70,12 @@ export default async function ConciliacionCuentaPage({
 }
 
 async function AccountDashboard({ accountId, period }: { accountId: string; period: string }) {
-  const [banco, txnDb] = await Promise.all([
+  const [banco, txnDb, flagSigs] = await Promise.all([
     getBankMovements(period, accountId),
     getTransactions(period),
+    getMovementFlags(period, accountId),
   ]);
+  const flags = new Set(flagSigs);
   const txns = filterForAccount(
     accountId,
     txnDb.map(
@@ -91,7 +93,7 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
       }),
     ),
   );
-  const result = reconcileForAccount(accountId, banco, txns, period);
+  const result = reconcileForAccount(accountId, banco, txns, period, flags);
 
   // Enriquecer el detalle conciliado con datos de la factura (bills_360):
   // período de factura, valor de factura y status de factura.
@@ -122,5 +124,5 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
     }),
   };
 
-  return <Dashboard result={enriched} />;
+  return <Dashboard result={enriched} accountId={accountId} period={period} />;
 }

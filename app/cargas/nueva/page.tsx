@@ -83,7 +83,7 @@ export default function NuevaCargaPage() {
           </Link>
         </div>
         <div className="mt-6">
-          <Dashboard result={result} />
+          <Dashboard result={result} accountId={account?.id ?? ""} period={`${month} ${year}`} />
         </div>
       </div>
     );

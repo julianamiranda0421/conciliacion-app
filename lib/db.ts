@@ -224,6 +224,46 @@ export async function getLoads(period?: string): Promise<LoadRow[]> {
   }
 }
 
+// ---- Clasificación manual de movimientos (marcar ingreso como recaudo) ----
+// Defensivas: si la tabla movement_flags no existe, no rompen el flujo.
+export async function getMovementFlags(period: string, accountId: string): Promise<string[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("movement_flags")
+      .select("sig")
+      .eq("period", period)
+      .eq("account_id", accountId);
+    if (error) throw error;
+    return (data ?? []).map((r) => (r as { sig: string }).sig);
+  } catch (e) {
+    console.warn("getMovementFlags omitido:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+export async function addMovementFlag(period: string, accountId: string, sig: string) {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("movement_flags")
+    .upsert(
+      { period, account_id: accountId, sig, es_recaudo: true, updated_at: new Date().toISOString() } as never,
+      { onConflict: "period,account_id,sig" },
+    );
+  if (error) throw new Error(`addMovementFlag: ${error.message}`);
+}
+
+export async function removeMovementFlag(period: string, accountId: string, sig: string) {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("movement_flags")
+    .delete()
+    .eq("period", period)
+    .eq("account_id", accountId)
+    .eq("sig", sig);
+  if (error) throw new Error(`removeMovementFlag: ${error.message}`);
+}
+
 export async function accountHasData(period: string, accountId: string): Promise<boolean> {
   const sb = getSupabase();
   const { count } = await sb
