@@ -44,38 +44,24 @@ const TABS: TabDef[] = [
     ],
   },
   {
-    id: "bancoSinTxn",
-    label: "⚠️ En Banco, sin transaction ID",
-    filters: [{ key: "descripcion", label: "Concepto" }],
+    id: "pendientes",
+    label: "🟠 Partidas Conciliatorias Pendientes",
+    filters: [{ key: "status", label: "Status", type: "select" }],
     cols: [
-      { key: "fechaBanco", label: "Fecha" },
-      { key: "descripcion", label: "Concepto" },
-      { key: "sucursal", label: "Punto" },
-      { key: "billId", label: "Bill" },
-      { key: "documento", label: "Documento" },
-      { key: "valorBanco", label: "Valor", num: true },
-      { key: "nota", label: "Nota" },
-    ],
-  },
-  {
-    id: "txnSinBanco",
-    label: "⚠️ En transactions, sin mov Bancario",
-    filters: [{ key: "tipo", label: "Tipo" }],
-    cols: [
-      { key: "transactionId", label: "Txn ID" },
-      { key: "billId", label: "Bill" },
-      { key: "valorAplicado", label: "Valor", num: true },
-      { key: "fechaPago", label: "Fecha pago" },
-      { key: "tipo", label: "Tipo" },
-      { key: "nota", label: "Nota" },
+      { key: "fecha", label: "Fecha" },
+      { key: "concepto", label: "Concepto" },
+      { key: "punto", label: "Punto" },
+      { key: "billId", label: "Factura" },
+      { key: "valor", label: "Valor", num: true },
+      { key: "status", label: "Status" },
     ],
   },
   {
     id: "movimientos",
     label: "🏦 Movimientos bancarios",
     filters: [
-      { key: "descripcion", label: "Concepto" },
-      { key: "sucursal", label: "Canal" },
+      { key: "descripcion", label: "Concepto", type: "select" },
+      { key: "fecha", label: "Fecha de ingreso", type: "select" },
     ],
     cols: [
       { key: "fecha", label: "Fecha" },
@@ -87,7 +73,6 @@ const TABS: TabDef[] = [
   {
     id: "dev",
     label: "🚨 Cheques devueltos",
-    filters: [{ key: "riesgo", label: "Riesgo" }],
     cols: [
       { key: "fechaDev", label: "Fecha DEV" },
       { key: "documento", label: "Documento" },
@@ -101,7 +86,6 @@ const TABS: TabDef[] = [
 
 export function Dashboard({ result }: { result: ReconResult }) {
   const [current, setCurrent] = useState<keyof ReconResult>("conciliado");
-  const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string | string[]>>({});
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
@@ -112,10 +96,7 @@ export function Dashboard({ result }: { result: ReconResult }) {
     tab.filters?.find((f) => f.key === key)?.type ?? "select";
 
   const rows = useMemo(() => {
-    const q = search.toLowerCase();
     let r = rawRows.filter((row) => {
-      if (q && !Object.values(row).some((v) => String(v ?? "").toLowerCase().includes(q)))
-        return false;
       for (const k in filters) {
         const fv = filters[k];
         const cell = String(row[k] ?? "");
@@ -142,16 +123,16 @@ export function Dashboard({ result }: { result: ReconResult }) {
       });
     }
     return r;
-  }, [rawRows, search, filters, sortKey, sortAsc]);
+  }, [rawRows, filters, sortKey, sortAsc]);
 
   const k = result.resumen;
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
   const kpis = [
-    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: "todo lo que ingresó (positivos)", bar: pctConc },
+    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: "neto (positivos − cheques dev.)", bar: pctConc },
     { cls: "ok", lbl: "Total ingreso conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso` },
     { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
-    { cls: k.descuadre ? "bad" : "ok", lbl: "Diferencia (recaudo)", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` },
+    { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por conciliar", val: money(k.totalPendiente), sub: "ingreso al banco − conciliado" },
   ];
 
   const valClass = (cls: string) =>
@@ -187,7 +168,6 @@ export function Dashboard({ result }: { result: ReconResult }) {
                 setCurrent(t.id);
                 setSortKey(null);
                 setFilters({});
-                setSearch("");
               }}
               className={`rounded-full border px-4 py-2 text-sm transition ${
                 active
@@ -203,12 +183,6 @@ export function Dashboard({ result }: { result: ReconResult }) {
 
       {/* Toolbar */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar (factura, valor, sucursal...)"
-          className="h-10 min-w-[260px] rounded-md border border-line bg-white px-3 text-sm"
-        />
         {tab.filters?.map((f) => {
           const vals = [...new Set(rawRows.map((r) => r[f.key]).filter((v) => v != null && v !== ""))]
             .map(String)
@@ -385,6 +359,20 @@ function Cell({ col, value }: { col: Col; value: unknown }) {
         <span
           className={`rounded-md px-2 py-1 text-xs font-bold ${
             ok ? "bg-success/15 text-success" : "bg-warning/20 text-warning"
+          }`}
+        >
+          {String(value ?? "")}
+        </span>
+      </td>
+    );
+  }
+  if (col.key === "status") {
+    const critico = value === "Cheque devuelto";
+    return (
+      <td className={base}>
+        <span
+          className={`rounded-md px-2 py-1 text-xs font-bold ${
+            critico ? "bg-error/10 text-error" : "bg-warning/20 text-warning"
           }`}
         >
           {String(value ?? "")}

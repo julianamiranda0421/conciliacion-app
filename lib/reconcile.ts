@@ -66,10 +66,23 @@ export type DevAnalisis = {
   riesgo: string;
 };
 
+// Partida conciliatoria pendiente: centraliza recaudos que no cruzaron, pagos
+// aplicados sin ingreso al banco, y cheques devueltos (con signo negativo).
+export type Pendiente = {
+  fecha: string;
+  concepto: string;
+  punto: string;
+  billId: string;
+  valor: number; // con signo del banco (los cheques devueltos van negativos)
+  status: string; // "Cheque devuelto" | "Pago no aplicado" | "Recaudo sin cruzar" | ...
+  transactionId?: number;
+};
+
 export type ReconResult = {
   conciliado: Conciliado[];
   bancoSinTxn: BancoSinTxn[];
   txnSinBanco: TxnSinBanco[];
+  pendientes: Pendiente[];
   movimientos: Movimiento[];
   dev: DevAnalisis[];
   resumen: {
@@ -86,6 +99,7 @@ export type ReconResult = {
     diferenciaValor: number;
     totalIngresoBanco: number;
     totalDevValor: number;
+    totalPendiente: number;
   };
 };
 
@@ -212,16 +226,51 @@ export function reconcile(
     valor: m.valor,
   }));
 
+  // Partidas conciliatorias pendientes (centralizado): recaudos sin cruzar,
+  // pagos aplicados sin ingreso y los cheques devueltos (signo negativo).
+  const pendientes: Pendiente[] = [
+    ...bancoSinTxn.map((b) => ({
+      fecha: b.fechaBanco,
+      concepto: b.descripcion,
+      punto: b.sucursal,
+      billId: b.billId,
+      valor: b.valorBanco,
+      status: devValores.has(b.valorBanco) ? "Cheque devuelto" : "Recaudo sin cruzar",
+    })),
+    ...txnSinBanco.map((t) => ({
+      fecha: t.fechaPago,
+      concepto: "Pago aplicado sin ingreso al banco",
+      punto: "",
+      billId: t.billId,
+      valor: t.valorAplicado,
+      status: "Pago no aplicado",
+      transactionId: t.transactionId,
+    })),
+    ...devAnalisis.map((d) => ({
+      fecha: d.fechaDev,
+      concepto: "DEV CHEQUE (devolución)",
+      punto: "",
+      billId: "",
+      valor: -d.valor, // signo del banco: negativo
+      status: "Cheque devuelto",
+    })),
+  ];
+
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
   const totalTsb = txnSinBanco.reduce((s, t) => s + t.valorAplicado, 0);
-  const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+  const positivesGross = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
   const totalDevValor = devAnalisis.reduce((s, d) => s + d.valor, 0);
+  // Los cheques devueltos reversan el ingreso (efecto cero), así que se restan
+  // del total para reflejar el ingreso neto real que quedó en la cuenta.
+  const totalIngresoBanco = positivesGross - totalDevValor;
+  const totalPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
 
   return {
     conciliado,
     bancoSinTxn,
     txnSinBanco,
+    pendientes,
     movimientos,
     dev: devAnalisis,
     resumen: {
@@ -238,6 +287,7 @@ export function reconcile(
       diferenciaValor: conciliado.reduce((s, c) => s + Math.abs(c.diferencia), 0),
       totalIngresoBanco,
       totalDevValor,
+      totalPendiente,
     },
   };
 }
@@ -394,14 +444,25 @@ export function reconcileAch(
     valor: m.valor,
   }));
 
+  const pendientes: Pendiente[] = bancoSinTxn.map((b) => ({
+    fecha: b.fechaBanco,
+    concepto: b.descripcion,
+    punto: b.sucursal,
+    billId: b.billId,
+    valor: b.valorBanco,
+    status: "Abono sin aplicar",
+  }));
+
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
   const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+  const totalPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
 
   return {
     conciliado,
     bancoSinTxn,
     txnSinBanco: [],
+    pendientes,
     movimientos,
     dev: [],
     resumen: {
@@ -418,6 +479,7 @@ export function reconcileAch(
       diferenciaValor: conciliado.reduce((s, c) => s + Math.abs(c.diferencia), 0),
       totalIngresoBanco,
       totalDevValor: 0,
+      totalPendiente,
     },
   };
 }
