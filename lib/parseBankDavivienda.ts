@@ -18,11 +18,20 @@ export function parseBankDavivienda(data: Uint8Array): BankMovement[] {
   // range:1 -> usa la 2da fila como encabezado (la 1ra es el título "Movimientos")
   const rows = XLSX.utils.sheet_to_json<Row>(sheet, { range: 1, defval: null });
 
+  // Columna "Tran": Nota Credito = ingreso (+), Nota Debito = egreso (−).
+  // Todos los valores vienen positivos; el signo se deriva de esta columna.
+  const tranKey = Object.keys(rows[0] ?? {}).find((k) =>
+    k.trim().toLowerCase().startsWith("tran"),
+  );
+
   const out: BankMovement[] = [];
   for (const r of rows) {
     const desc = String(r["Desc Mot."] ?? "").trim();
-    const valor = Number(r["Valor Total"]);
-    if (!desc || isNaN(valor)) continue;
+    const rawValor = Number(r["Valor Total"]);
+    if (!desc || isNaN(rawValor)) continue;
+    const tran = String((tranKey ? r[tranKey] : "") ?? "").toLowerCase();
+    const esDebito = tran.includes("debito") || tran.includes("débito");
+    const valor = esDebito ? -Math.abs(rawValor) : Math.abs(rawValor);
     const idOrigen = String(r["ID Origen/Destino"] ?? "").replace(/\D/g, "").replace(/^0+/, "");
     out.push({
       fecha: toDateStr(r["Fecha"]),

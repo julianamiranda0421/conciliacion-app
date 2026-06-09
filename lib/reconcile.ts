@@ -455,7 +455,9 @@ export function reconcileAch(
 
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
-  const totalIngresoBanco = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+  // Ingreso al banco para cuentas ACH = SOLO el recaudo (depósitos de los clientes
+  // configurados), no todos los positivos del extracto operativo.
+  const totalIngresoBanco = depositos.reduce((s, d) => s + d.valor, 0);
   const totalPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
 
   return {

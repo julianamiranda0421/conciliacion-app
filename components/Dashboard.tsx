@@ -129,7 +129,7 @@ export function Dashboard({ result }: { result: ReconResult }) {
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
   const kpis = [
-    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: "neto (positivos − cheques dev.)", bar: pctConc },
+    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: k.totalDevValor > 0 ? "neto (− cheques devueltos)" : "recaudo recibido", bar: pctConc },
     { cls: "ok", lbl: "Total ingreso conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso` },
     { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
     { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por conciliar", val: money(k.totalPendiente), sub: "ingreso al banco − conciliado" },
