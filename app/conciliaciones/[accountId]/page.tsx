@@ -6,6 +6,7 @@ import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
 import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
+import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -43,13 +44,16 @@ export default async function ConciliacionCuentaPage({
             {cutoff ? ` · al corte ${cutoff}` : ""}
           </p>
         </div>
-        <Link
-          href="/cargas/nueva"
-          className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-sm text-ink-soft transition hover:bg-white"
-        >
-          <Upload className="h-4 w-4" />
-          Cargar / actualizar
-        </Link>
+        <div className="flex items-center gap-3">
+          <ConciliacionPeriodSelect accountId={accountId} periods={periods} current={period} />
+          <Link
+            href="/cargas/nueva"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-sm text-ink-soft transition hover:bg-white"
+          >
+            <Upload className="h-4 w-4" />
+            Cargar / actualizar
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6">

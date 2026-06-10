@@ -153,12 +153,22 @@ export async function getReconTransactions(periodo: string): Promise<TxnRow[]> {
   return out;
 }
 
-// Períodos (meses de extracto) disponibles para conciliar = meses con bank_movements.
+// "Mayo 2026" -> 202605 (ordenable, mayor = más reciente). 0 si no parsea.
+function bankPeriodKey(p: string): number {
+  const m = p.trim().toLowerCase().match(/([a-záéíóú]+)\s+(\d{4})/);
+  if (!m) return 0;
+  return (Number(m[2]) || 0) * 100 + (MESES_ES[m[1]] || 0);
+}
+
+// Períodos (meses de extracto) disponibles para conciliar = meses con bank_movements,
+// del más reciente al más antiguo.
 export async function listReconPeriods(): Promise<string[]> {
   const sb = getSupabase();
   const { data, error } = await sb.from("bank_movements").select("period");
   if (error) throw new Error(`listReconPeriods: ${error.message}`);
-  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))];
+  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))].sort(
+    (a, b) => bankPeriodKey(b) - bankPeriodKey(a),
+  );
 }
 
 // ---- Movimientos del banco ----
