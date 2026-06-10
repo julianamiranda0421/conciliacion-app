@@ -124,6 +124,29 @@ create table if not exists observations (
 );
 create index if not exists idx_obs_period_acct on observations(period, account_id);
 
+-- Adquirencias (recaudo por tarjeta de crédito del 7772). Cada fila es un cargo TC:
+-- consumo = valor factura; comisiones se descuentan; neto = ingreso al banco.
+-- Carga aparte por período; se reemplaza completa (delete por período + insert).
+create table if not exists adquirencias (
+  id            bigserial primary key,
+  period        text not null,
+  fecha_vale    date,
+  fecha_abono   date,
+  red           text,
+  terminal      text,
+  num_autoriza  text,
+  tarjeta       text,
+  tipo_tarjeta  text,
+  consumo       numeric,
+  comision      numeric,
+  rete_fuente   numeric,
+  rete_iva      numeric,
+  rete_ica      numeric,
+  neto          numeric,
+  created_at    timestamptz default now()
+);
+create index if not exists idx_adq_period on adquirencias(period);
+
 create index if not exists idx_b360_bill on bills_360(bill_id);
 create index if not exists idx_b360_period on bills_360(period);
 create index if not exists idx_b360_company on bills_360(company_id);

@@ -4,9 +4,12 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactions } from "@/lib/db";
+import { reconcileTC } from "@/lib/reconcileTC";
 import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
+import { AdquirenciasUpload } from "@/components/AdquirenciasUpload";
+import { TarjetaCreditoPanel } from "@/components/TarjetaCreditoPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +72,35 @@ export default async function ConciliacionCuentaPage({
           <AccountDashboard accountId={accountId} period={period} />
         )}
       </div>
+
+      {accountId === "davivienda-7772" && <TarjetaCreditoSection accountId={accountId} period={period} />}
+    </div>
+  );
+}
+
+// Sección de tarjeta de crédito (adquirencias) — solo para el 7772.
+async function TarjetaCreditoSection({ accountId, period }: { accountId: string; period: string }) {
+  const [adq, banco, tcRows] = await Promise.all([
+    getAdquirencias(period),
+    getBankMovements(period, accountId),
+    getTcTransactions(period),
+  ]);
+
+  return (
+    <div className="mt-10 border-t border-line pt-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-ink-soft">
+          Archivo de adquirencias (TC) del período {period}. Se carga aparte del extracto.
+        </div>
+        <AdquirenciasUpload period={period} />
+      </div>
+      {adq.length > 0 ? (
+        <TarjetaCreditoPanel result={reconcileTC(adq, banco, tcRows)} />
+      ) : (
+        <div className="rounded-xl border border-dashed border-line bg-white px-6 py-10 text-center text-sm text-ink-soft">
+          Aún no has cargado el archivo de adquirencias para {period}. Súbelo arriba para conciliar el recaudo por tarjeta de crédito.
+        </div>
+      )}
     </div>
   );
 }

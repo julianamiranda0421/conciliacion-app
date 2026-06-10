@@ -5,6 +5,7 @@ import type { TxnRow } from "./parseTransactions";
 import type { BankMovement } from "./parseBank";
 import type { Conciliado } from "./reconcile";
 import type { Bill360Raw } from "./metabase";
+import type { Adquirencia } from "./parseAdquirencias";
 
 async function insertChunked(table: string, rows: Record<string, unknown>[]) {
   const sb = getSupabase();
@@ -158,6 +159,54 @@ function bankPeriodKey(p: string): number {
   const m = p.trim().toLowerCase().match(/([a-záéíóú]+)\s+(\d{4})/);
   if (!m) return 0;
   return (Number(m[2]) || 0) * 100 + (MESES_ES[m[1]] || 0);
+}
+
+// Transacciones de TARJETA DE CRÉDITO (de bills_360) para conciliar adquirencias.
+// Ventana = mes del extracto ± 1 mes (el abono del banco puede ser 1-2 días después
+// del pago, cruzando fin de mes). El enlace real es por valor (consumo == amount).
+export async function getTcTransactions(periodo: string) {
+  const range = bankPeriodRange(periodo);
+  const sb = getSupabase();
+  const cols = "transaction_id,bill_id,amount,bia_credits,payment_date,period,bill_status";
+  const out: {
+    transactionId: number; billId: string; amount: number; biaCredits: number;
+    paymentDate: string; period: string | null; billStatus: string | null;
+  }[] = [];
+  // Ampliar la ventana un mes a cada lado.
+  let start: string | undefined, end: string | undefined;
+  if (range) {
+    const [ys, ms] = range.start.split("-").map(Number);
+    const [ye, me] = range.end.split("-").map(Number);
+    const prev = ms === 1 ? `${ys - 1}-12-01` : `${ys}-${String(ms - 1).padStart(2, "0")}-01`;
+    const next = me === 12 ? `${ye + 1}-01-01` : `${ye}-${String(me + 1).padStart(2, "0")}-01`;
+    start = prev; end = next;
+  }
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb
+      .from("bills_360")
+      .select(cols)
+      .eq("payment_method_type", "CREDIT_CARD")
+      .eq("transaction_state", "SUCCESS")
+      .range(from, from + size - 1);
+    if (start && end) q = q.gte("payment_date", start).lt("payment_date", end);
+    const { data, error } = await q;
+    if (error) throw new Error(`getTcTransactions: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const r of rows) {
+      out.push({
+        transactionId: Number(r.transaction_id),
+        billId: String(r.bill_id ?? ""),
+        amount: Number(r.amount) || 0,
+        biaCredits: Number(r.bia_credits) || 0,
+        paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
+        period: (r.period as string) ?? null,
+        billStatus: (r.bill_status as string) ?? null,
+      });
+    }
+    if (rows.length < size) break;
+  }
+  return out;
 }
 
 // Períodos (meses de extracto) disponibles para conciliar = meses con bank_movements,
@@ -398,6 +447,74 @@ export async function saveObservation(
       { onConflict: "period,account_id,transaction_id" },
     );
   if (error) throw new Error(`saveObservation: ${error.message}`);
+}
+
+// ---- Adquirencias (recaudo por tarjeta de crédito del 7772) ----
+export async function saveAdquirencias(period: string, rows: Adquirencia[]) {
+  const sb = getSupabase();
+  await sb.from("adquirencias").delete().eq("period", period);
+  await insertChunked(
+    "adquirencias",
+    rows.map((r) => ({
+      period,
+      fecha_vale: r.fechaVale || null,
+      fecha_abono: r.fechaAbono || null,
+      red: r.red,
+      terminal: r.terminal,
+      num_autoriza: r.numAutoriza,
+      tarjeta: r.tarjeta,
+      tipo_tarjeta: r.tipoTarjeta,
+      consumo: r.consumo,
+      comision: r.comision,
+      rete_fuente: r.reteFuente,
+      rete_iva: r.reteIva,
+      rete_ica: r.reteIca,
+      neto: r.neto,
+    })),
+  );
+}
+
+export async function getAdquirencias(period: string): Promise<Adquirencia[]> {
+  const sb = getSupabase();
+  const out: Adquirencia[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb
+      .from("adquirencias")
+      .select(
+        "fecha_vale,fecha_abono,red,terminal,num_autoriza,tarjeta,tipo_tarjeta,consumo,comision,rete_fuente,rete_iva,rete_ica,neto",
+      )
+      .eq("period", period)
+      .range(from, from + size - 1);
+    if (error) {
+      // Si la tabla aún no existe, no rompemos la página (devolvemos vacío).
+      console.warn("getAdquirencias omitido:", error.message);
+      return [];
+    }
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const r of rows) {
+      const consumo = Number(r.consumo) || 0;
+      const neto = Number(r.neto) || 0;
+      out.push({
+        fechaVale: String(r.fecha_vale ?? ""),
+        fechaAbono: String(r.fecha_abono ?? ""),
+        red: String(r.red ?? ""),
+        terminal: String(r.terminal ?? ""),
+        numAutoriza: String(r.num_autoriza ?? ""),
+        tarjeta: String(r.tarjeta ?? ""),
+        tipoTarjeta: String(r.tipo_tarjeta ?? ""),
+        consumo,
+        comision: Number(r.comision) || 0,
+        reteFuente: Number(r.rete_fuente) || 0,
+        reteIva: Number(r.rete_iva) || 0,
+        reteIca: Number(r.rete_ica) || 0,
+        neto,
+        comisionTotal: consumo - neto,
+      });
+    }
+    if (rows.length < size) break;
+  }
+  return out;
 }
 
 export async function accountHasData(period: string, accountId: string): Promise<boolean> {
