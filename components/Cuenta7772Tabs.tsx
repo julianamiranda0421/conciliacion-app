@@ -1,21 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Banknote, CreditCard, Globe } from "lucide-react";
+import { LayoutDashboard, Banknote, CreditCard, Globe } from "lucide-react";
 
-// Sub-pestañas por canal de recaudo del 7772: físico/cheque, tarjeta y PSE.
+// Sub-pestañas del 7772: resumen consolidado + un tab por canal de recaudo.
 // Cada sección se renderiza en el servidor y se pasa como prop; aquí solo se alterna.
 export function Cuenta7772Tabs({
+  resumen,
   fisico,
   tc,
   pse,
 }: {
+  resumen: React.ReactNode;
   fisico: React.ReactNode;
   tc: React.ReactNode;
   pse: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<"fisico" | "tc" | "pse">("fisico");
+  const [tab, setTab] = useState<"resumen" | "fisico" | "tc" | "pse">("resumen");
   const tabs = [
+    { id: "resumen" as const, label: "Resumen 7772", icon: LayoutDashboard },
     { id: "fisico" as const, label: "Recaudo físico / cheque", icon: Banknote },
     { id: "tc" as const, label: "Tarjeta de crédito", icon: CreditCard },
     { id: "pse" as const, label: "PSE", icon: Globe },
@@ -45,6 +48,7 @@ export function Cuenta7772Tabs({
       </div>
 
       <div className="mt-6">
+        <div className={tab === "resumen" ? "" : "hidden"}>{resumen}</div>
         <div className={tab === "fisico" ? "" : "hidden"}>{fisico}</div>
         <div className={tab === "tc" ? "" : "hidden"}>{tc}</div>
         <div className={tab === "pse" ? "" : "hidden"}>{pse}</div>

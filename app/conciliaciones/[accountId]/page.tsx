@@ -11,6 +11,8 @@ import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect"
 import { AdquirenciasUpload } from "@/components/AdquirenciasUpload";
 import { TarjetaCreditoPanel } from "@/components/TarjetaCreditoPanel";
 import { Cuenta7772Tabs } from "@/components/Cuenta7772Tabs";
+import { Resumen7772Panel } from "@/components/Resumen7772Panel";
+import { resumen7772 } from "@/lib/resumen7772";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +65,7 @@ export default async function ConciliacionCuentaPage({
       <div className="mt-6">
         {accountId === "davivienda-7772" ? (
           <Cuenta7772Tabs
+            resumen={hasData ? <Resumen7772Section accountId={accountId} period={period} /> : <NoBankData period={period} />}
             fisico={hasData ? <AccountDashboard accountId={accountId} period={period} /> : <NoBankData period={period} />}
             tc={<TarjetaCreditoSection accountId={accountId} period={period} />}
             pse={<PsePlaceholder />}
@@ -98,6 +101,12 @@ function PsePlaceholder() {
       </p>
     </div>
   );
+}
+
+// Resumen consolidado del 7772: ingreso total por canal + extracto completo.
+async function Resumen7772Section({ accountId, period }: { accountId: string; period: string }) {
+  const banco = await getBankMovements(period, accountId);
+  return <Resumen7772Panel resumen={resumen7772(banco)} />;
 }
 
 // Sección de tarjeta de crédito (adquirencias) — solo para el 7772.

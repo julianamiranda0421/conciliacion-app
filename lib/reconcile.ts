@@ -23,6 +23,10 @@ export type ChequeConfig = {
   // contra cualquier transacción cuya factura aparezca en el recaudo del banco
   // (no se restringe por método). Útil para Davivienda 7772.
   restrictTxnsToRecaudoBills?: boolean;
+  // Si true: la cuenta tiene VARIOS canales en el mismo extracto (físico + TC + PSE),
+  // así que "ingreso al banco" y "movimientos" de esta vista se limitan al recaudo
+  // físico/cheque (no a todos los positivos del extracto). Útil para Davivienda 7772.
+  multiChannel?: boolean;
 };
 const DEFAULT_CHEQUE: ChequeConfig = {
   conceptos: CONCEPTOS_RECAUDO,
@@ -256,8 +260,12 @@ export function reconcile(
     };
   });
 
-  // Movimientos bancarios = TODO el extracto (trazabilidad completa)
-  const movimientos: Movimiento[] = banco.map((m) => ({
+  // Movimientos bancarios: por defecto TODO el extracto (trazabilidad). En cuentas
+  // multicanal (7772) esta vista es solo del recaudo físico/cheque; el extracto
+  // completo va en la pestaña Resumen.
+  const esRecaudoMov = (m: BankMovement) => cfg.conceptos.some((c) => m.descripcion.startsWith(c));
+  const movsView = cfg.multiChannel ? banco.filter(esRecaudoMov) : banco;
+  const movimientos: Movimiento[] = movsView.map((m) => ({
     fecha: m.fecha,
     descripcion: m.descripcion,
     sucursal: m.sucursal,
@@ -298,7 +306,12 @@ export function reconcile(
   const totalConc = conciliado.reduce((s, c) => s + c.valorBanco, 0);
   const totalBst = bancoSinTxn.reduce((s, b) => s + b.valorBanco, 0);
   const totalTsb = txnSinBanco.reduce((s, t) => s + t.valorAplicado, 0);
-  const positivesGross = banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+  // Ingreso al banco. En cuenta multicanal (7772) = solo el recaudo físico/cheque
+  // (los positivos de PSE/TC se reportan en sus propias pestañas y en el Resumen).
+  // En cuenta de un solo canal (8465) = todos los positivos del extracto.
+  const positivesGross = cfg.multiChannel
+    ? recaudos.reduce((s, r) => s + r.valor, 0)
+    : banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
   const totalDevValor = devAnalisis.reduce((s, d) => s + d.valor, 0);
   // Los cheques devueltos reversan el ingreso (efecto cero), así que se restan
   // del total para reflejar el ingreso neto real que quedó en la cuenta.
@@ -566,6 +579,7 @@ const CHEQUE_CONFIG: Record<string, ChequeConfig> = {
     conceptos: ["Deposito Efectivo en Oficina", "Ajuste pago BIA ENERGY REC FACTURAS"],
     billOf: (m) => m.ref2.replace(/^0+/, ""),
     restrictTxnsToRecaudoBills: true,
+    multiChannel: true,
   },
 };
 
