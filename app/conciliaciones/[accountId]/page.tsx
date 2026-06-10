@@ -4,7 +4,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations } from "@/lib/db";
 import { reconcileTC } from "@/lib/reconcileTC";
 import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
@@ -111,9 +111,10 @@ async function Resumen7772Section({ accountId, period }: { accountId: string; pe
 
 // Sección de tarjeta de crédito (adquirencias) — solo para el 7772.
 async function TarjetaCreditoSection({ accountId, period }: { accountId: string; period: string }) {
-  const [adq, banco] = await Promise.all([
+  const [adq, banco, observaciones] = await Promise.all([
     getAdquirencias(period),
     getBankMovements(period, accountId),
+    getObservations(period, accountId),
   ]);
   const tcRows = await getTcTransactionsByAmounts(period, adq.map((a) => a.consumo));
 
@@ -126,7 +127,12 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
         <AdquirenciasUpload period={period} />
       </div>
       {adq.length > 0 ? (
-        <TarjetaCreditoPanel result={reconcileTC(adq, banco, tcRows)} />
+        <TarjetaCreditoPanel
+          result={reconcileTC(adq, banco, tcRows)}
+          period={period}
+          accountId={accountId}
+          observaciones={observaciones}
+        />
       ) : (
         <div className="rounded-xl border border-dashed border-line bg-white px-6 py-10 text-center text-sm text-ink-soft">
           Aún no has cargado el archivo de adquirencias para {period}. Súbelo arriba para conciliar el recaudo por tarjeta de crédito.
