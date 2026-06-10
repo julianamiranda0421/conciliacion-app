@@ -21,7 +21,6 @@ export function TarjetaCreditoPanel({
   const cuadra = Math.abs(r.diffNetoVsBanco) < 100;
 
   const [fFactura, setFFactura] = useState("");
-  const [fTarjeta, setFTarjeta] = useState("");
   const [fEstado, setFEstado] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
 
@@ -34,22 +33,16 @@ export function TarjetaCreditoPanel({
     }).catch(() => {});
   }
 
-  const tiposTarjeta = useMemo(
-    () => [...new Set(result.detalle.map((d) => d.tipoTarjeta || d.red).filter(Boolean))].sort(),
-    [result.detalle],
-  );
-
   const filas = useMemo(() => {
     return result.detalle.filter((d) => {
       if (fFactura && !(d.link?.facturas.join(",").includes(fFactura.trim()))) return false;
-      if (fTarjeta && (d.tipoTarjeta || d.red) !== fTarjeta) return false;
       if (fEstado) {
         const estado = !d.link ? "Sin cruce" : d.link.esParcial ? "Parcial" : "Total";
         if (estado !== fEstado) return false;
       }
       return true;
     });
-  }, [result.detalle, fFactura, fTarjeta, fEstado]);
+  }, [result.detalle, fFactura, fEstado]);
 
   const cards = [
     { label: "Facturas por TC (consumo)", value: cop(r.totalConsumo), sub: `${r.nAdq} cargos · ${r.nEnlazadas} cruzados a factura` },
@@ -116,14 +109,10 @@ export function TarjetaCreditoPanel({
           placeholder="Buscar factura…"
           className="h-9 w-44 rounded-md border border-line bg-white px-3 text-sm"
         />
-        <select value={fTarjeta} onChange={(e) => setFTarjeta(e.target.value)} className="h-9 rounded-md border border-line bg-white px-3 text-sm">
-          <option value="">Toda tarjeta/red</option>
-          {tiposTarjeta.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
         <select value={fEstado} onChange={(e) => setFEstado(e.target.value)} className="h-9 rounded-md border border-line bg-white px-3 text-sm">
-          <option value="">Todo estado</option>
-          <option value="Total">Cruzada · total</option>
-          <option value="Parcial">Cruzada · parcial</option>
+          <option value="">Todo pago</option>
+          <option value="Total">Total</option>
+          <option value="Parcial">Parcial</option>
           <option value="Sin cruce">Sin cruce</option>
         </select>
         <span className="text-sm text-ink-soft">{filas.length} de {result.detalle.length}</span>
@@ -135,9 +124,9 @@ export function TarjetaCreditoPanel({
           <thead>
             <tr>
               {[
-                "TransacciónID", "Factura", "Período factura", "Tarjeta / Red",
-                "Valor factura", "Valor consumo", "Comisión", "Valor neto",
-                "Bia créditos", "Fecha abono", "Status factura", "Pago", "Estado", "Observaciones",
+                "TransacciónID", "Factura", "Período factura",
+                "Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso",
+                "Fecha abono", "Status factura", "Pago", "Observaciones",
               ].map((h) => (
                 <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-left text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
               ))}
@@ -152,22 +141,14 @@ export function TarjetaCreditoPanel({
                   <td className="whitespace-nowrap border-b border-line px-3 py-2 tabular-nums">{d.link?.transactionId ?? "—"}</td>
                   <td className="border-b border-line px-3 py-2 text-xs">{d.link ? d.link.facturas.join(", ") : "—"}</td>
                   <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs">{d.link?.periodo ?? "—"}</td>
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs text-ink-soft">{d.tipoTarjeta || d.red}</td>
                   <td className="border-b border-line px-3 py-2 text-right tabular-nums">{cop(d.valorFactura)}</td>
+                  <td className="border-b border-line px-3 py-2 text-right tabular-nums text-ink-soft">{d.link?.biaCreditos ? cop(d.link.biaCreditos) : "—"}</td>
                   <td className="border-b border-line px-3 py-2 text-right tabular-nums">{cop(d.consumo)}</td>
                   <td className="border-b border-line px-3 py-2 text-right tabular-nums text-warning">{cop(d.comisionTotal)}</td>
                   <td className="border-b border-line px-3 py-2 text-right tabular-nums font-medium">{cop(d.neto)}</td>
-                  <td className="border-b border-line px-3 py-2 text-right tabular-nums text-ink-soft">{d.link?.biaCreditos ? cop(d.link.biaCreditos) : "—"}</td>
                   <td className="whitespace-nowrap border-b border-line px-3 py-2">{d.fechaAbono}</td>
                   <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs">{d.link?.statusFactura ?? "—"}</td>
                   <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs">{cruzada ? (d.link!.esParcial ? "Parcial" : "Total") : "—"}</td>
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2">
-                    {cruzada ? (
-                      <span className="rounded bg-success/15 px-2 py-0.5 text-xs font-medium text-success">Cruzada</span>
-                    ) : (
-                      <span className="rounded bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">Sin cruce</span>
-                    )}
-                  </td>
                   <td className="border-b border-line px-3 py-2">
                     {txnId ? (
                       <input
