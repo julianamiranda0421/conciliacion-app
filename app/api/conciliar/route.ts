@@ -15,6 +15,26 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MESES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+// "Junio 2026" -> "2026-06" (prefijo year-month). null si no parsea.
+function periodoPrefix(periodo: string): string | null {
+  const m = periodo.trim().toLowerCase().match(/([a-záéíóú]+)\s+(\d{4})/);
+  if (!m) return null;
+  const idx = MESES.findIndex((x) => x.toLowerCase() === m[1]);
+  if (idx < 0) return null;
+  return `${m[2]}-${String(idx + 1).padStart(2, "0")}`;
+}
+
+// "2026-06" -> "Junio 2026" (para mensajes).
+function prefixLabel(prefix: string): string {
+  const [y, mm] = prefix.split("-");
+  return `${MESES[Number(mm) - 1] ?? mm} ${y}`;
+}
+
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
@@ -68,6 +88,26 @@ export async function POST(req: Request) {
         );
       }
       banco = await parseBankPdf(buf);
+    }
+
+    // 2.b) Validar que el extracto SÍ corresponda al mes seleccionado. Evita
+    //      sobrescribir por error otro período (ej. subir el extracto de junio
+    //      eligiendo "Mayo"). Si ningún movimiento cae en el mes elegido, se bloquea.
+    const fechas = banco.map((m) => m.fecha).filter((f) => /^\d{4}-\d{2}/.test(f));
+    const selPrefix = periodoPrefix(periodo);
+    if (selPrefix && fechas.length > 0) {
+      const presentes = [...new Set(fechas.map((f) => f.slice(0, 7)))];
+      if (!presentes.includes(selPrefix)) {
+        const detectados = presentes.map(prefixLabel).join(", ");
+        return NextResponse.json(
+          {
+            error:
+              `El extracto contiene movimientos de ${detectados}, pero seleccionaste ${periodo}. ` +
+              `Verifica el mes para no sobrescribir otro período.`,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // 3) Conciliar y persistir
