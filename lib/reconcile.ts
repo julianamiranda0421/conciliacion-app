@@ -5,9 +5,13 @@
 import type { BankMovement } from "./parseBank";
 import type { Transaction } from "./parseTransactions";
 
+// Conceptos de recaudo (ingreso) del extracto Bancolombia 8465. Se matchean por
+// PREFIJO (el PDF a veces trunca la descripción, ej. "...RIN CHEQU" por "CHEQUE").
+//  - "RECAUDO VALIDACION EFECTIVO/CHEQUE": recaudo físico normal.
+//  - "RIN-RECAUDO ESPECIAL RIN EFECT/CHEQU": recaudo especial (RIN), mismo efecto.
 const CONCEPTOS_RECAUDO = [
-  "RECAUDO VALIDACION EFECTIVO",
-  "RECAUDO VALIDACION CHEQUE",
+  "RECAUDO VALIDACION",
+  "RIN-RECAUDO ESPECIAL",
 ];
 
 // Config de la conciliación de recaudo físico/cheque (match por factura, valor
@@ -149,7 +153,7 @@ export function reconcile(
   cfg: ChequeConfig = DEFAULT_CHEQUE,
 ): ReconResult {
   const recaudos = banco
-    .filter((m) => cfg.conceptos.includes(m.descripcion))
+    .filter((m) => cfg.conceptos.some((c) => m.descripcion.startsWith(c)))
     .map((m, i) => ({ ...m, _i: i, usado: false, bill: cfg.billOf(m) }));
 
   const dev = banco.filter((m) => m.descripcion.startsWith("DEV CHEQUE"));
@@ -213,7 +217,7 @@ export function reconcile(
       fechaBanco: elegido.fecha,
       fechaPago: t.paymentDate,
       sucursal: elegido.sucursal,
-      tipo: elegido.descripcion.includes("CHEQUE") ? "CHEQUE" : "EFECTIVO",
+      tipo: elegido.descripcion.includes("CHEQU") ? "CHEQUE" : "EFECTIVO",
       nivelMatch: nivel,
     });
   }
