@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import type { TcResult } from "@/lib/reconcileTC";
 
-const cop = (n: number) =>
-  new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
+// Mismo formato de moneda que el Conciliado físico ("$927.240").
+const cop = (n: number) => "$" + Number(n).toLocaleString("es-CO", { maximumFractionDigits: 0 });
 
 export function TarjetaCreditoPanel({
   result,
@@ -118,55 +118,66 @@ export function TarjetaCreditoPanel({
         <span className="text-sm text-ink-soft">{filas.length} de {result.detalle.length}</span>
       </div>
 
-      {/* Detalle por cargo TC — mismas columnas que el Conciliado físico + adquirencias */}
-      <div className="mt-3 overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr>
-              {[
-                "TransacciónID", "Factura", "Período factura",
-                "Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso",
-                "Fecha abono", "Status factura", "Pago", "Observaciones",
-              ].map((h) => (
-                <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-left text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((d, i) => {
-              const cruzada = !!d.link;
-              const txnId = d.link?.transactionId ?? 0;
-              return (
-                <tr key={i} className="hover:bg-primary-light/40">
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2 tabular-nums">{d.link?.transactionId ?? "—"}</td>
-                  <td className="border-b border-line px-3 py-2 text-xs">{d.link ? d.link.facturas.join(", ") : "—"}</td>
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs">{d.link?.periodo ?? "—"}</td>
-                  <td className="border-b border-line px-3 py-2 text-right tabular-nums">{cop(d.valorFactura)}</td>
-                  <td className="border-b border-line px-3 py-2 text-right tabular-nums text-ink-soft">{d.link?.biaCreditos ? cop(d.link.biaCreditos) : "—"}</td>
-                  <td className="border-b border-line px-3 py-2 text-right tabular-nums">{cop(d.consumo)}</td>
-                  <td className="border-b border-line px-3 py-2 text-right tabular-nums text-warning">{cop(d.comisionTotal)}</td>
-                  <td className="border-b border-line px-3 py-2 text-right tabular-nums font-medium">{cop(d.neto)}</td>
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2">{d.fechaAbono}</td>
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs">{d.link?.statusFactura ?? "—"}</td>
-                  <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs">{cruzada ? (d.link!.esParcial ? "Parcial" : "Total") : "—"}</td>
-                  <td className="border-b border-line px-3 py-2">
-                    {txnId ? (
-                      <input
-                        defaultValue={notes[String(txnId)] ?? ""}
-                        onChange={(e) => setNotes((n) => ({ ...n, [String(txnId)]: e.target.value }))}
-                        onBlur={(e) => saveNote(txnId, e.target.value)}
-                        placeholder="Anota…"
-                        className="h-8 w-40 rounded border border-line bg-white px-2 text-xs"
-                      />
-                    ) : (
-                      <span className="text-xs text-ink-soft">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* Detalle por cargo TC — misma visual que el Conciliado físico + adquirencias */}
+      <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                {[
+                  "TransacciónID", "Factura", "Período factura",
+                  "Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso",
+                  "Fecha abono", "Status factura", "Pago", "Observaciones",
+                ].map((h) => (
+                  <th key={h} className={`whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-left text-[11px] uppercase tracking-wide text-ink-soft ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((d, i) => {
+                const cruzada = !!d.link;
+                const txnId = d.link?.transactionId ?? 0;
+                const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm";
+                const numCls = `${base} text-right tabular-nums`;
+                const statusOk = d.link?.statusFactura === "SUCCESS";
+                return (
+                  <tr key={i} className="hover:bg-primary-light/40">
+                    <td className={`${base} tabular-nums`}>{d.link?.transactionId ?? "—"}</td>
+                    <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-sm">{d.link ? d.link.facturas.join(", ") : "—"}</td>
+                    <td className={base}>{d.link?.periodo ?? "—"}</td>
+                    <td className={numCls}>{cop(d.valorFactura)}</td>
+                    <td className={numCls}>{d.link ? cop(d.link.biaCreditos) : "—"}</td>
+                    <td className={numCls}>{cop(d.consumo)}</td>
+                    <td className={numCls}>{cop(d.comisionTotal)}</td>
+                    <td className={numCls}>{cop(d.neto)}</td>
+                    <td className={base}>{d.fechaAbono}</td>
+                    <td className={base}>
+                      {cruzada ? (
+                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>
+                          {d.link!.statusFactura}
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td className={base}>{cruzada ? (d.link!.esParcial ? "Parcial" : "Total") : "—"}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                      {txnId ? (
+                        <input
+                          value={notes[String(txnId)] ?? ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [String(txnId)]: e.target.value }))}
+                          onBlur={(e) => saveNote(txnId, e.target.value)}
+                          placeholder="—"
+                          className="h-8 w-52 rounded-md border border-line px-2 text-xs"
+                        />
+                      ) : (
+                        <span className="text-xs text-ink-soft">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
