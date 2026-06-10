@@ -10,6 +10,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
 import { AdquirenciasUpload } from "@/components/AdquirenciasUpload";
 import { TarjetaCreditoPanel } from "@/components/TarjetaCreditoPanel";
+import { Cuenta7772Tabs } from "@/components/Cuenta7772Tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -60,20 +61,41 @@ export default async function ConciliacionCuentaPage({
       </div>
 
       <div className="mt-6">
-        {!hasData ? (
-          <div className="rounded-xl border border-line bg-white px-6 py-16 text-center shadow-sm">
-            <div className="text-sm font-medium">Aún no hay conciliación para {period}</div>
-            <p className="mt-1 text-sm text-ink-soft">
-              Ve a <b>Cargas → Nueva carga</b>, sube el extracto de esta cuenta y se conciliará
-              contra la base de transactions del período.
-            </p>
-          </div>
+        {accountId === "davivienda-7772" ? (
+          <Cuenta7772Tabs
+            fisico={hasData ? <AccountDashboard accountId={accountId} period={period} /> : <NoBankData period={period} />}
+            tc={<TarjetaCreditoSection accountId={accountId} period={period} />}
+            pse={<PsePlaceholder />}
+          />
+        ) : !hasData ? (
+          <NoBankData period={period} />
         ) : (
           <AccountDashboard accountId={accountId} period={period} />
         )}
       </div>
+    </div>
+  );
+}
 
-      {accountId === "davivienda-7772" && <TarjetaCreditoSection accountId={accountId} period={period} />}
+function NoBankData({ period }: { period: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-white px-6 py-16 text-center shadow-sm">
+      <div className="text-sm font-medium">Aún no hay conciliación para {period}</div>
+      <p className="mt-1 text-sm text-ink-soft">
+        Ve a <b>Cargas → Nueva carga</b>, sube el extracto de esta cuenta y se conciliará
+        contra los pagos sincronizados desde Metabase.
+      </p>
+    </div>
+  );
+}
+
+function PsePlaceholder() {
+  return (
+    <div className="rounded-xl border border-dashed border-line bg-white px-6 py-16 text-center shadow-sm">
+      <div className="text-sm font-medium">PSE — próximamente</div>
+      <p className="mt-1 text-sm text-ink-soft">
+        La conciliación del recaudo por PSE (concepto &quot;Recaudos Compras Pse&quot;) está pendiente de implementar.
+      </p>
     </div>
   );
 }
@@ -87,8 +109,8 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
   ]);
 
   return (
-    <div className="mt-10 border-t border-line pt-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface/50 px-4 py-3">
         <div className="text-sm text-ink-soft">
           Archivo de adquirencias (TC) del período {period}. Se carga aparte del extracto.
         </div>

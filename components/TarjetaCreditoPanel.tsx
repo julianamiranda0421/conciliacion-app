@@ -1,4 +1,3 @@
-import { CreditCard } from "lucide-react";
 import type { TcResult } from "@/lib/reconcileTC";
 
 const cop = (n: number) =>
@@ -21,12 +20,8 @@ export function TarjetaCreditoPanel({ result }: { result: TcResult }) {
   ];
 
   return (
-    <div className="mt-10">
-      <div className="flex items-center gap-2">
-        <CreditCard className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-bold">Tarjeta de crédito (adquirencias)</h2>
-      </div>
-      <p className="mt-1 text-sm text-ink-soft">
+    <div>
+      <p className="text-sm text-ink-soft">
         El cliente paga la factura completa (consumo); el banco descuenta comisiones y abona el neto
         (las &quot;Nc …&quot; del extracto). La diferencia es la comisión, no un descuadre.
       </p>
