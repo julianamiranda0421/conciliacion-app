@@ -11,15 +11,19 @@
 import type { Adquirencia } from "./parseAdquirencias";
 import type { BankMovement } from "./parseBank";
 
-// Transacción de tarjeta de crédito (de bills_360), una fila por factura pagada.
+// Transacción candidata (de bills_360), una fila por factura pagada por la
+// transacción. El monto (amount) es por transacción (se repite por factura).
 export type TcTxn = {
   transactionId: number;
   billId: string;
-  amount: number; // monto cargado a la tarjeta (= consumo); por transacción
+  amount: number; // monto del pago (= Valor Consumo de la adquirencia)
   biaCredits: number; // por transacción
   paymentDate: string; // YYYY-MM-DD
   period: string | null; // período de la factura
   billStatus: string | null;
+  methodType: string; // CREDIT_CARD / BANK_ACCOUNT (PSE) / ...
+  methodName: string;
+  isPartial: boolean; // pago parcial (la factura tiene varios pagos)
 };
 
 export type TcLink = {
@@ -28,6 +32,8 @@ export type TcLink = {
   periodo: string;
   statusFactura: string;
   biaCreditos: number;
+  metodo: string;
+  esParcial: boolean;
 };
 
 export type TcDetalle = {
@@ -73,13 +79,13 @@ export function reconcileTC(
   banco: BankMovement[],
   tcRows: TcTxn[],
 ): TcResult {
-  // Agrupar las filas TC por transacción (amount/biaCredits se repiten por factura).
-  type Txn = { transactionId: number; amount: number; biaCredits: number; paymentDate: string; bills: TcTxn[] };
+  // Agrupar las filas por transacción (amount/biaCredits se repiten por factura).
+  type Txn = { transactionId: number; amount: number; biaCredits: number; paymentDate: string; methodType: string; isPartial: boolean; bills: TcTxn[] };
   const txnMap = new Map<number, Txn>();
   for (const r of tcRows) {
     let t = txnMap.get(r.transactionId);
     if (!t) {
-      t = { transactionId: r.transactionId, amount: r2(r.amount), biaCredits: r.biaCredits, paymentDate: r.paymentDate, bills: [] };
+      t = { transactionId: r.transactionId, amount: r2(r.amount), biaCredits: r.biaCredits, paymentDate: r.paymentDate, methodType: r.methodType, isPartial: r.isPartial, bills: [] };
       txnMap.set(r.transactionId, t);
     }
     t.bills.push(r);
@@ -99,8 +105,14 @@ export function reconcileTC(
   for (const a of orden) {
     const cands = (porMonto.get(r2(a.consumo)) ?? []).filter((t) => !usados.has(t.transactionId));
     if (!cands.length) { linkByAdq.set(a, null); continue; }
+    // Desempate: primero tarjeta de crédito, luego fecha más cercana al cargo.
     const ref = a.fechaVale || a.fechaAbono;
-    const elegido = cands.sort((x, y) => dayDist(x.paymentDate, ref) - dayDist(y.paymentDate, ref))[0];
+    const elegido = cands.sort((x, y) => {
+      const cx = x.methodType === "CREDIT_CARD" ? 0 : 1;
+      const cy = y.methodType === "CREDIT_CARD" ? 0 : 1;
+      if (cx !== cy) return cx - cy;
+      return dayDist(x.paymentDate, ref) - dayDist(y.paymentDate, ref);
+    })[0];
     usados.add(elegido.transactionId);
     const periodos = [...new Set(elegido.bills.map((b) => b.period).filter(Boolean))] as string[];
     const statuses = [...new Set(elegido.bills.map((b) => b.billStatus).filter(Boolean))] as string[];
@@ -110,6 +122,8 @@ export function reconcileTC(
       periodo: periodos[0] ?? "—",
       statusFactura: statuses.length === 1 ? statuses[0] : statuses.join(", ") || "SUCCESS",
       biaCreditos: elegido.biaCredits,
+      metodo: elegido.methodType,
+      esParcial: elegido.isPartial,
     });
   }
 

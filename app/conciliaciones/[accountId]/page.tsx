@@ -4,7 +4,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactions } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts } from "@/lib/db";
 import { reconcileTC } from "@/lib/reconcileTC";
 import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
@@ -102,11 +102,11 @@ function PsePlaceholder() {
 
 // Sección de tarjeta de crédito (adquirencias) — solo para el 7772.
 async function TarjetaCreditoSection({ accountId, period }: { accountId: string; period: string }) {
-  const [adq, banco, tcRows] = await Promise.all([
+  const [adq, banco] = await Promise.all([
     getAdquirencias(period),
     getBankMovements(period, accountId),
-    getTcTransactions(period),
   ]);
+  const tcRows = await getTcTransactionsByAmounts(period, adq.map((a) => a.consumo));
 
   return (
     <div>

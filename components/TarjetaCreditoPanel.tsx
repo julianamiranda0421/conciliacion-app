@@ -88,7 +88,12 @@ export function TarjetaCreditoPanel({ result }: { result: TcResult }) {
                 <td className="border-b border-line px-3 py-2 text-right tabular-nums font-medium">{cop(d.neto)}</td>
                 <td className="whitespace-nowrap border-b border-line px-3 py-2">
                   {d.link ? (
-                    <span className="rounded bg-success/15 px-2 py-0.5 text-xs font-medium text-success">Enlazada</span>
+                    <span className="inline-flex flex-wrap gap-1">
+                      <span className="rounded bg-success/15 px-2 py-0.5 text-xs font-medium text-success">Enlazada</span>
+                      {d.link.esParcial && (
+                        <span className="rounded bg-primary-light px-2 py-0.5 text-xs font-medium text-primary">parcial</span>
+                      )}
+                    </span>
                   ) : (
                     <span className="rounded bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">Sin factura</span>
                   )}

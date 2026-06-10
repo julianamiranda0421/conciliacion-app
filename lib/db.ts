@@ -161,39 +161,43 @@ function bankPeriodKey(p: string): number {
   return (Number(m[2]) || 0) * 100 + (MESES_ES[m[1]] || 0);
 }
 
-// Transacciones de TARJETA DE CRÉDITO (de bills_360) para conciliar adquirencias.
-// Ventana = mes del extracto ± 1 mes (el abono del banco puede ser 1-2 días después
-// del pago, cruzando fin de mes). El enlace real es por valor (consumo == amount).
-export async function getTcTransactions(periodo: string) {
+import type { TcTxn } from "./reconcileTC";
+
+// Transacciones candidatas para conciliar adquirencias TC: pagos exitosos cuyo
+// monto coincide con algún Valor Consumo del archivo de adquirencias. Se busca por
+// VALOR contra CUALQUIER método (no solo CREDIT_CARD): el archivo del adquirente
+// incluye débito y a veces el pago quedó registrado en la plataforma con otro
+// método (ej. PSE). Una factura puede tener varios pagos (parciales): cada pago es
+// una transacción con su propio monto. El método se usa solo para desempatar.
+export async function getTcTransactionsByAmounts(
+  periodo: string,
+  amounts: number[],
+): Promise<TcTxn[]> {
+  if (amounts.length === 0) return [];
   const range = bankPeriodRange(periodo);
-  const sb = getSupabase();
-  const cols = "transaction_id,bill_id,amount,bia_credits,payment_date,period,bill_status";
-  const out: {
-    transactionId: number; billId: string; amount: number; biaCredits: number;
-    paymentDate: string; period: string | null; billStatus: string | null;
-  }[] = [];
-  // Ampliar la ventana un mes a cada lado.
   let start: string | undefined, end: string | undefined;
   if (range) {
     const [ys, ms] = range.start.split("-").map(Number);
     const [ye, me] = range.end.split("-").map(Number);
-    const prev = ms === 1 ? `${ys - 1}-12-01` : `${ys}-${String(ms - 1).padStart(2, "0")}-01`;
-    const next = me === 12 ? `${ye + 1}-01-01` : `${ye}-${String(me + 1).padStart(2, "0")}-01`;
-    start = prev; end = next;
+    start = ms === 1 ? `${ys - 1}-12-01` : `${ys}-${String(ms - 1).padStart(2, "0")}-01`;
+    end = me === 12 ? `${ye + 1}-01-01` : `${ye}-${String(me + 1).padStart(2, "0")}-01`;
   }
-  const size = 1000;
-  for (let from = 0; ; from += size) {
+  const sb = getSupabase();
+  const cols =
+    "transaction_id,bill_id,amount,bia_credits,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment";
+  const uniq = [...new Set(amounts.map((a) => Math.round(a)))];
+  const out: TcTxn[] = [];
+  const chunk = 100;
+  for (let i = 0; i < uniq.length; i += chunk) {
     let q = sb
       .from("bills_360")
       .select(cols)
-      .eq("payment_method_type", "CREDIT_CARD")
       .eq("transaction_state", "SUCCESS")
-      .range(from, from + size - 1);
+      .in("amount", uniq.slice(i, i + chunk));
     if (start && end) q = q.gte("payment_date", start).lt("payment_date", end);
     const { data, error } = await q;
-    if (error) throw new Error(`getTcTransactions: ${error.message}`);
-    const rows = (data ?? []) as Record<string, unknown>[];
-    for (const r of rows) {
+    if (error) throw new Error(`getTcTransactionsByAmounts: ${error.message}`);
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
       out.push({
         transactionId: Number(r.transaction_id),
         billId: String(r.bill_id ?? ""),
@@ -202,9 +206,11 @@ export async function getTcTransactions(periodo: string) {
         paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
         period: (r.period as string) ?? null,
         billStatus: (r.bill_status as string) ?? null,
+        methodType: (r.payment_method_type as string) ?? "",
+        methodName: (r.payment_method_name as string) ?? "",
+        isPartial: r.is_partial_payment === true,
       });
     }
-    if (rows.length < size) break;
   }
   return out;
 }
