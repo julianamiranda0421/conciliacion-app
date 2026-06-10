@@ -72,30 +72,21 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              {["Fecha", "Recaudo", "Concepto", "Tran", "Valor"].map((h) => (
+              {["Fecha", "Concepto", "Recaudo", "Tran", "Valor"].map((h) => (
                 <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-left text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {movs.map((m, i) => {
-              const esCanal = m.recaudo === "FÍSICO" || m.recaudo === "TC" || m.recaudo === "PSE";
-              return (
+            {movs.map((m, i) => (
               <tr key={i} className="hover:bg-primary-light/40">
                 <td className="whitespace-nowrap border-b border-line px-3 py-2">{m.fecha}</td>
-                <td className="whitespace-nowrap border-b border-line px-3 py-2">
-                  {esCanal ? (
-                    <span className="rounded bg-primary-light px-2 py-0.5 text-xs font-semibold text-primary">{m.recaudo}</span>
-                  ) : (
-                    <span className="text-xs text-ink-soft">{m.recaudo}</span>
-                  )}
-                </td>
                 <td className="border-b border-line px-3 py-2">{m.descripcion}</td>
+                <td className="whitespace-nowrap border-b border-line px-3 py-2">{m.recaudo}</td>
                 <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs text-ink-soft">{m.tran}</td>
                 <td className={`border-b border-line px-3 py-2 text-right tabular-nums ${m.valor < 0 ? "text-error" : ""}`}>{cop(m.valor)}</td>
               </tr>
-              );
-            })}
+            ))}
           </tbody>
         </table>
       </div>
