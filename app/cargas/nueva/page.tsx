@@ -318,8 +318,8 @@ function UploadStep({
       <h2 className="text-lg font-semibold">Cargar extracto del banco</h2>
       <p className="mt-1 text-sm text-ink-soft">
         Sube el extracto del banco. Bancolombia acepta <b>PDF</b> (se convierte
-        solo) o <b>Excel</b>. La base de transactions se carga aparte, una sola
-        vez por mes, en el módulo Transactions.
+        solo) o <b>Excel</b>. Los pagos se toman automáticamente de la cartera
+        sincronizada desde Metabase (Cartera 360); ya no se cargan a mano.
       </p>
       <div className="mt-5 grid gap-4 sm:max-w-md">
         <FileDrop
@@ -392,7 +392,7 @@ function ConfirmStep({
       <h2 className="text-lg font-semibold">Confirmar y conciliar</h2>
       <p className="mt-1 text-sm text-ink-soft">
         Revisa los datos. Al confirmar, la app convierte el extracto y lo cruza
-        contra la base de transactions del período (cárgala antes en Transactions).
+        contra los pagos del período sincronizados desde Metabase (Cartera 360).
       </p>
       <dl className="mt-5 divide-y divide-line rounded-lg border border-line">
         <Row label="Cuenta" value={account ? `${account.bank} ${account.accountNumber}` : "—"} />

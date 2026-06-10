@@ -380,13 +380,17 @@ export function reconcileAch(
     .filter((m) => config.matchDeposit(m.descripcion))
     .map((m) => ({ ...m, cliente: config.clienteLabel(m) }));
 
-  // Agrupar pagos manuales por S3 Path Document
+  // Agrupar las facturas de un mismo giro. La llave es el payment_date completo
+  // (paymentGroup): en bills_360 todas las facturas pagadas en un mismo giro ACH
+  // comparten ese timestamp exacto. Antes se usaba el comprobante S3 (screenshot
+  // manual); ahora el timestamp lo reemplaza. Fallback a s3 si no hay paymentGroup.
   const grupos = new Map<string, Transaction[]>();
   for (const t of txns) {
-    if (!t.s3PathDocument) continue;
-    const arr = grupos.get(t.s3PathDocument) ?? [];
+    const key = t.paymentGroup || t.s3PathDocument;
+    if (!key) continue;
+    const arr = grupos.get(key) ?? [];
     arr.push(t);
-    grupos.set(t.s3PathDocument, arr);
+    grupos.set(key, arr);
   }
   const gruposArr = [...grupos.entries()].map(([s3, facturas]) => ({
     s3,

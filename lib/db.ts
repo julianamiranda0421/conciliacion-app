@@ -76,6 +76,91 @@ export async function listTransactionPeriods(): Promise<string[]> {
   return [...new Set((data ?? []).map((r) => (r as { period: string }).period))].sort().reverse();
 }
 
+// ---- Transactions para conciliar, leídas de bills_360 (Metabase) ----
+// Reemplaza el cargue manual de la tabla `transactions`. La fuente es bills_360
+// (espejo de Metabase, grano factura×pago). Se traen los pagos cuyo payment_date
+// cae en el mes del extracto bancario (ej. "Mayo 2026"), que es como antes se
+// filtraba el Excel manual. El cruce real lo hace el motor por factura/valor.
+const MESES_ES: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
+};
+
+// "Mayo 2026" -> { start: "2026-05-01", end: "2026-06-01" } (rango [start, end)).
+function bankPeriodRange(periodo: string): { start: string; end: string } | null {
+  const m = periodo.trim().toLowerCase().match(/([a-záéíóú]+)\s+(\d{4})/);
+  if (!m) return null;
+  const mes = MESES_ES[m[1]];
+  const anio = Number(m[2]);
+  if (!mes || !anio) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const start = `${anio}-${pad(mes)}-01`;
+  const end = mes === 12 ? `${anio + 1}-01-01` : `${anio}-${pad(mes + 1)}-01`;
+  return { start, end };
+}
+
+type Bills360TxnRow = {
+  transaction_id: number;
+  bill_id: number;
+  amount: number | null;
+  payment_method_type: string | null;
+  payment_method_name: string | null;
+  transaction_state: string | null;
+  payment_date: string | null;
+  collection_type: string | null;
+  bia_credits: number | null;
+  s3_path_document: string | null;
+};
+
+export async function getReconTransactions(periodo: string): Promise<TxnRow[]> {
+  const range = bankPeriodRange(periodo);
+  const sb = getSupabase();
+  const cols =
+    "transaction_id,bill_id,amount,payment_method_type,payment_method_name,transaction_state,payment_date,collection_type,bia_credits,s3_path_document";
+  const out: TxnRow[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb
+      .from("bills_360")
+      .select(cols)
+      .not("transaction_id", "is", null)
+      // Solo pagos exitosos: los intentos ERROR generan transacciones duplicadas
+      // por factura (mismo valor) y a veces con monto inflado (total de la transacción).
+      .eq("transaction_state", "SUCCESS")
+      .range(from, from + size - 1);
+    if (range) q = q.gte("payment_date", range.start).lt("payment_date", range.end);
+    const { data, error } = await q;
+    if (error) throw new Error(`getReconTransactions: ${error.message}`);
+    const rows = (data ?? []) as Bills360TxnRow[];
+    for (const r of rows) {
+      out.push({
+        transactionId: r.transaction_id,
+        billId: String(r.bill_id ?? ""),
+        amount: Number(r.amount) || 0,
+        paymentMethodType: r.payment_method_type ?? "",
+        paymentMethodName: r.payment_method_name ?? "",
+        status: r.transaction_state ?? "",
+        paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
+        collectionType: r.collection_type ?? "",
+        biaCreditsUsed: Number(r.bia_credits) || 0,
+        s3PathDocument: r.s3_path_document ?? "",
+        // El giro se agrupa por el payment_date COMPLETO (timestamp).
+        paymentGroup: r.payment_date ? String(r.payment_date) : undefined,
+      });
+    }
+    if (rows.length < size) break;
+  }
+  return out;
+}
+
+// Períodos (meses de extracto) disponibles para conciliar = meses con bank_movements.
+export async function listReconPeriods(): Promise<string[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("bank_movements").select("period");
+  if (error) throw new Error(`listReconPeriods: ${error.message}`);
+  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))];
+}
+
 // ---- Movimientos del banco ----
 export async function saveBankMovements(
   period: string,

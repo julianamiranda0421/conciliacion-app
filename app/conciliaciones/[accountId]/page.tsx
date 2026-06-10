@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Upload } from "lucide-react";
 import { getAccount } from "@/lib/banks";
-import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
+import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getTransactions, listTransactionPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado } from "@/lib/db";
 import { Dashboard } from "@/components/Dashboard";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export default async function ConciliacionCuentaPage({
   const account = getAccount(accountId);
   if (!account) notFound();
 
-  const periods = await listTransactionPeriods();
+  const periods = await listReconPeriods();
   const period = periodParam || periods[0] || "Mayo 2026";
 
   const hasData = await accountHasData(period, accountId);
@@ -70,29 +70,13 @@ export default async function ConciliacionCuentaPage({
 }
 
 async function AccountDashboard({ accountId, period }: { accountId: string; period: string }) {
-  const [banco, txnDb, flagSigs] = await Promise.all([
+  const [banco, txnRows, flagSigs] = await Promise.all([
     getBankMovements(period, accountId),
-    getTransactions(period),
+    getReconTransactions(period),
     getMovementFlags(period, accountId),
   ]);
   const flags = new Set(flagSigs);
-  const txns = filterForAccount(
-    accountId,
-    txnDb.map(
-      (r): TxnRow => ({
-        transactionId: r.transaction_id,
-        billId: r.bill_id ?? "",
-        amount: Number(r.amount),
-        paymentMethodType: r.payment_method_type ?? "",
-        paymentMethodName: r.payment_method_name ?? "",
-        status: r.status ?? "",
-        paymentDate: r.payment_date ?? "",
-        collectionType: r.collection_type ?? "",
-        biaCreditsUsed: Number(r.bia_credits_used) || 0,
-        s3PathDocument: r.s3_path_document ?? "",
-      }),
-    ),
-  );
+  const txns = filterForAccount(accountId, txnRows);
   const result = reconcileForAccount(accountId, banco, txns, period, flags);
 
   // Enriquecer el detalle conciliado con datos de la factura (bills_360) y notas.

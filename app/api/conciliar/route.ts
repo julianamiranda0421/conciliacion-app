@@ -1,35 +1,19 @@
 import { NextResponse } from "next/server";
 import { parseBankPdf } from "@/lib/parseBank";
 import { parseBankDavivienda } from "@/lib/parseBankDavivienda";
-import { filterForAccount, type TxnRow } from "@/lib/parseTransactions";
+import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
 import { getAccount } from "@/lib/banks";
 import {
-  getTransactions,
+  getReconTransactions,
   saveBankMovements,
   saveCrossings,
   recordLoad,
   enrichConciliado,
-  type TxnDbRow,
 } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-export function toTxnRow(r: TxnDbRow): TxnRow {
-  return {
-    transactionId: r.transaction_id,
-    billId: r.bill_id ?? "",
-    amount: Number(r.amount),
-    paymentMethodType: r.payment_method_type ?? "",
-    paymentMethodName: r.payment_method_name ?? "",
-    status: r.status ?? "",
-    paymentDate: r.payment_date ?? "",
-    collectionType: r.collection_type ?? "",
-    biaCreditsUsed: Number(r.bia_credits_used) || 0,
-    s3PathDocument: r.s3_path_document ?? "",
-  };
-}
 
 export async function POST(req: Request) {
   try {
@@ -46,18 +30,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Falta período o cuenta." }, { status: 400 });
     }
 
-    // 1) Transactions del período (debe estar cargada previamente)
-    const txnDb = await getTransactions(periodo);
-    if (txnDb.length === 0) {
+    // 1) Transactions del período desde bills_360 (Metabase). Ya NO se cargan a mano:
+    //    se sincronizan desde Metabase en Cartera 360.
+    const txnRows = await getReconTransactions(periodo);
+    if (txnRows.length === 0) {
       return NextResponse.json(
-        { error: `No hay transactions cargadas para ${periodo}. Cárgalas primero en el módulo Transactions.` },
+        { error: `No hay pagos en bills_360 para ${periodo}. Sincroniza la cartera desde Metabase primero (Cartera 360).` },
         { status: 400 },
       );
     }
-    const txns = filterForAccount(accountId, txnDb.map(toTxnRow));
+    const txns = filterForAccount(accountId, txnRows);
     if (txns.length === 0) {
       return NextResponse.json(
-        { error: "No hay transactions que apliquen a esta cuenta en el período." },
+        { error: "No hay pagos que apliquen a esta cuenta en el período." },
         { status: 400 },
       );
     }

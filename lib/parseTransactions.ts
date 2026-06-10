@@ -15,6 +15,10 @@ export type TxnRow = {
   collectionType: string;
   biaCreditsUsed: number;
   s3PathDocument: string; // link del comprobante = aplicación manual si no está vacío
+  // Llave de agrupación de un giro/depósito ACH: el payment_date completo (timestamp).
+  // En bills_360 todas las facturas de un mismo giro comparten este timestamp exacto,
+  // así que reemplaza al "comprobante" (screenshot) que antes se agrupaba a mano.
+  paymentGroup?: string;
 };
 
 // Forma reducida que consume el motor de conciliación.
@@ -26,6 +30,7 @@ export type Transaction = {
   collectionType: string;
   biaCreditsUsed: number;
   s3PathDocument: string;
+  paymentGroup?: string; // timestamp del giro (llave de agrupación ACH)
 };
 
 type Row = Record<string, unknown>;
@@ -69,13 +74,28 @@ const map = (r: TxnRow): Transaction => ({
   collectionType: r.collectionType,
   biaCreditsUsed: r.biaCreditsUsed,
   s3PathDocument: r.s3PathDocument,
+  paymentGroup: r.paymentGroup,
 });
 
+// ¿Es una transferencia bancaria manual? (FINANCE_TRANSFER / "Transferencia bancaria").
+// Es el canal por el que entran los recaudos ACH de 5571 / 1800 / 1144: varias facturas
+// pagadas en un mismo giro (mismo payment_date), que el motor agrupa por ese timestamp.
+function esTransferencia(r: TxnRow): boolean {
+  return (
+    r.paymentMethodType === "FINANCE_TRANSFER" ||
+    r.paymentMethodName.toLowerCase().includes("transferencia")
+  );
+}
+
 // Filtro de transactions que entran a cada cuenta bancaria.
+// Fuente = bills_360 (Metabase). El recaudo de cada cuenta llega por un canal distinto:
+//  - 8465: recaudo físico Bancolombia (efectivo/cheque) = PHYSICAL + nombre con "Bancolombia".
+//  - 5571/1800/1144: transferencias bancarias (FINANCE_TRANSFER); el motor agrupa por giro
+//    (payment_date) y cuadra cada depósito del banco por valor.
+//  - 7772: cheque/físico aplicado por varios métodos; se pasan TODAS y el motor cruza por factura.
 export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction[] {
   switch (accountId) {
     case "bancolombia-8465":
-      // Recaudo físico Bancolombia (efectivo + cheque)
       return rows
         .filter(
           (r) =>
@@ -86,12 +106,8 @@ export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction
     case "davivienda-5571":
     case "bancolombia-1800":
     case "bancolombia-1144":
-      // Pagos manuales (tienen comprobante S3); se agrupan por S3 en el motor.
-      return rows.filter((r) => r.s3PathDocument !== "").map(map);
+      return rows.filter(esTransferencia).map(map);
     case "davivienda-7772":
-      // El recaudo de 7772 (cheque/físico) se aplica por varios métodos de pago,
-      // así que se pasan TODAS las transacciones y el motor cruza por factura
-      // (restrictTxnsToRecaudoBills) contra el recaudo del banco.
       return rows.map(map);
     default:
       return [];
