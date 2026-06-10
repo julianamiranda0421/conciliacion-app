@@ -7,19 +7,25 @@ const cop = (n: number) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 
 export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
-  const [fConcepto, setFConcepto] = useState("");
+  const [fRecaudo, setFRecaudo] = useState("");
   const [fTran, setFTran] = useState("");
 
-  const conceptos = useMemo(
-    () => [...new Set(resumen.movimientos.map((m) => m.descripcion))].sort(),
-    [resumen.movimientos],
-  );
+  // Opciones del filtro "Recaudo": primero los 3 canales, luego el resto (su concepto).
+  const recaudos = useMemo(() => {
+    const all = [...new Set(resumen.movimientos.map((m) => m.recaudo))];
+    const orden = ["FÍSICO", "TC", "PSE"];
+    return [
+      ...orden.filter((o) => all.includes(o)),
+      ...all.filter((r) => !orden.includes(r)).sort(),
+    ];
+  }, [resumen.movimientos]);
+
   const movs = useMemo(
     () =>
       resumen.movimientos.filter(
-        (m) => (!fConcepto || m.descripcion === fConcepto) && (!fTran || m.tran === fTran),
+        (m) => (!fRecaudo || m.recaudo === fRecaudo) && (!fTran || m.tran === fTran),
       ),
-    [resumen.movimientos, fConcepto, fTran],
+    [resumen.movimientos, fRecaudo, fTran],
   );
 
   return (
@@ -50,9 +56,9 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
       {/* Movimientos bancarios completos */}
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <h3 className="text-sm font-semibold">Movimientos bancarios (extracto completo)</h3>
-        <select value={fConcepto} onChange={(e) => setFConcepto(e.target.value)} className="h-9 max-w-[280px] rounded-md border border-line bg-white px-3 text-sm">
-          <option value="">Todo concepto</option>
-          {conceptos.map((c) => <option key={c} value={c}>{c}</option>)}
+        <select value={fRecaudo} onChange={(e) => setFRecaudo(e.target.value)} className="h-9 max-w-[280px] rounded-md border border-line bg-white px-3 text-sm">
+          <option value="">Todo recaudo</option>
+          {recaudos.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={fTran} onChange={(e) => setFTran(e.target.value)} className="h-9 rounded-md border border-line bg-white px-3 text-sm">
           <option value="">Todo Tran</option>
@@ -66,20 +72,30 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              {["Fecha", "Concepto", "Tran", "Valor"].map((h) => (
+              {["Fecha", "Recaudo", "Concepto", "Tran", "Valor"].map((h) => (
                 <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-left text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {movs.map((m, i) => (
+            {movs.map((m, i) => {
+              const esCanal = m.recaudo === "FÍSICO" || m.recaudo === "TC" || m.recaudo === "PSE";
+              return (
               <tr key={i} className="hover:bg-primary-light/40">
                 <td className="whitespace-nowrap border-b border-line px-3 py-2">{m.fecha}</td>
+                <td className="whitespace-nowrap border-b border-line px-3 py-2">
+                  {esCanal ? (
+                    <span className="rounded bg-primary-light px-2 py-0.5 text-xs font-semibold text-primary">{m.recaudo}</span>
+                  ) : (
+                    <span className="text-xs text-ink-soft">{m.recaudo}</span>
+                  )}
+                </td>
                 <td className="border-b border-line px-3 py-2">{m.descripcion}</td>
                 <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs text-ink-soft">{m.tran}</td>
                 <td className={`border-b border-line px-3 py-2 text-right tabular-nums ${m.valor < 0 ? "text-error" : ""}`}>{cop(m.valor)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

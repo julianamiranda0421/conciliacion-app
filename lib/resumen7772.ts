@@ -4,7 +4,7 @@
 import type { BankMovement } from "./parseBank";
 
 export type CanalResumen = { key: string; label: string; valor: number; n: number };
-export type MovResumen = { fecha: string; descripcion: string; valor: number; tran: string };
+export type MovResumen = { fecha: string; descripcion: string; valor: number; tran: string; recaudo: string };
 export type Resumen7772 = {
   totalIngreso: number;
   canales: CanalResumen[];
@@ -20,6 +20,16 @@ function canalDe(descripcion: string): "fisico" | "tc" | "pse" | "otros" {
   if (/^nc\b/i.test(d)) return "tc";
   if (/recaudos?\s+compras?\s+pse/i.test(d)) return "pse";
   return "otros";
+}
+
+// Etiqueta de la columna "Recaudo": agrupa los 3 canales; lo demás conserva su concepto.
+export function recaudoLabel(descripcion: string): string {
+  switch (canalDe(descripcion)) {
+    case "fisico": return "FÍSICO";
+    case "tc": return "TC";
+    case "pse": return "PSE";
+    default: return descripcion.trim();
+  }
 }
 
 export function resumen7772(banco: BankMovement[]): Resumen7772 {
@@ -50,6 +60,7 @@ export function resumen7772(banco: BankMovement[]): Resumen7772 {
     descripcion: m.descripcion,
     valor: m.valor,
     tran: m.valor < 0 ? "Nota Débito" : "Nota Crédito",
+    recaudo: recaudoLabel(m.descripcion),
   }));
 
   return { totalIngreso, canales, movimientos, nMovimientos: banco.length };
