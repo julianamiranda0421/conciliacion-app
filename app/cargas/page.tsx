@@ -58,6 +58,8 @@ export default async function CargasPage() {
                   <td className="border-b border-line px-4 py-2.5 text-sm">
                     {l.scope === "transactions" ? (
                       <span className="rounded-md bg-primary-light px-2 py-1 text-xs font-medium text-primary">Transactions</span>
+                    ) : l.scope === "adquirencias-7772" ? (
+                      <span className="rounded-md bg-primary-light px-2 py-1 text-xs font-medium text-primary">Adquirencias (TC)</span>
                     ) : (
                       accountLabel(l.scope)
                     )}

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
@@ -8,7 +8,6 @@ import { getBankMovements, getReconTransactions, listReconPeriods, accountHasDat
 import { reconcileTC } from "@/lib/reconcileTC";
 import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
-import { AdquirenciasUpload } from "@/components/AdquirenciasUpload";
 import { TarjetaCreditoPanel } from "@/components/TarjetaCreditoPanel";
 import { Cuenta7772Tabs } from "@/components/Cuenta7772Tabs";
 import { Resumen7772Panel } from "@/components/Resumen7772Panel";
@@ -52,13 +51,6 @@ export default async function ConciliacionCuentaPage({
         </div>
         <div className="flex items-center gap-3">
           <ConciliacionPeriodSelect accountId={accountId} periods={periods} current={period} />
-          <Link
-            href="/cargas/nueva"
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-sm text-ink-soft transition hover:bg-white"
-          >
-            <Upload className="h-4 w-4" />
-            Cargar / actualizar
-          </Link>
         </div>
       </div>
 
@@ -120,11 +112,12 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface/50 px-4 py-3">
-        <div className="text-sm text-ink-soft">
-          Archivo de adquirencias (TC) del período {period}. Se carga aparte del extracto.
-        </div>
-        <AdquirenciasUpload period={period} />
+      <div className="mb-4 rounded-lg border border-line bg-surface/50 px-4 py-3 text-sm text-ink-soft">
+        Archivo de adquirencias (TC) del período {period}. Se carga desde{" "}
+        <Link href="/cargas/nueva" className="font-medium text-primary hover:underline">
+          Cargas → Nueva carga → Adquirencias
+        </Link>
+        .
       </div>
       {adq.length > 0 ? (
         <TarjetaCreditoPanel
@@ -135,7 +128,11 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
         />
       ) : (
         <div className="rounded-xl border border-dashed border-line bg-white px-6 py-10 text-center text-sm text-ink-soft">
-          Aún no has cargado el archivo de adquirencias para {period}. Súbelo arriba para conciliar el recaudo por tarjeta de crédito.
+          Aún no has cargado el archivo de adquirencias para {period}. Cárgalo desde{" "}
+          <Link href="/cargas/nueva" className="font-medium text-primary hover:underline">
+            Cargas → Nueva carga → Adquirencias
+          </Link>{" "}
+          para conciliar el recaudo por tarjeta de crédito.
         </div>
       )}
     </div>

@@ -20,6 +20,15 @@ import type { ReconResult } from "@/lib/reconcile";
 const YEARS = [2025, 2026];
 const STEPS = ["Configurar", "Cargar archivo", "Confirmar"];
 
+// Resumen que devuelve /api/adquirencias al cargar el archivo TC.
+type AdqSummary = { count: number; consumo: number; neto: number; comision: number };
+
+const cop = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  maximumFractionDigits: 0,
+});
+
 export default function NuevaCargaPage() {
   const [step, setStep] = useState(0);
   const [year, setYear] = useState(2026);
@@ -30,30 +39,97 @@ export default function NuevaCargaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReconResult | null>(null);
+  const [adqResult, setAdqResult] = useState<AdqSummary | null>(null);
 
   const account = BANK_ACCOUNTS.find((a) => a.id === accountId) ?? null;
+  // Adquirencias (TC): es una carga "aparte" (no es un extracto bancario). Sube a
+  // /api/adquirencias y alimenta la conciliación TC del 7772.
+  const isAdquirencias = account?.id === "adquirencias";
   const canStep0 = !!account && account.enabled;
   const canStep1 = !!bankFile;
 
-  async function runConciliacion() {
+  async function runCarga() {
     if (!bankFile || !account) return;
     setLoading(true);
     setError(null);
     try {
-      const fd = new FormData();
-      fd.append("bank", bankFile);
-      fd.append("accountId", account.id);
-      fd.append("periodo", `${month} ${year}`);
-      fd.append("cutoff", cutoff);
-      const res = await fetch("/api/conciliar", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al conciliar");
-      setResult(data as ReconResult);
+      if (isAdquirencias) {
+        const fd = new FormData();
+        fd.append("file", bankFile);
+        fd.append("periodo", `${month} ${year}`);
+        fd.append("cutoff", cutoff);
+        const res = await fetch("/api/adquirencias", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Error al cargar adquirencias");
+        setAdqResult(data as AdqSummary);
+      } else {
+        const fd = new FormData();
+        fd.append("bank", bankFile);
+        fd.append("accountId", account.id);
+        fd.append("periodo", `${month} ${year}`);
+        fd.append("cutoff", cutoff);
+        const res = await fetch("/api/conciliar", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Error al conciliar");
+        setResult(data as ReconResult);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al conciliar");
+      setError(e instanceof Error ? e.message : "Error al procesar la carga");
     } finally {
       setLoading(false);
     }
+  }
+
+  // Reinicia el wizard para una nueva carga.
+  function resetWizard() {
+    setResult(null);
+    setAdqResult(null);
+    setStep(0);
+    setBankFile(null);
+  }
+
+  if (adqResult) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Adquirencias cargadas</h1>
+            <p className="mt-1 text-sm text-ink-soft">
+              {month} {year}
+              {cutoff ? ` · corte ${cutoff}` : ""}
+            </p>
+          </div>
+          <Link
+            href="/cargas/nueva"
+            onClick={resetWizard}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-sm text-ink-soft transition hover:bg-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Nueva carga
+          </Link>
+        </div>
+
+        <div className="mt-6 rounded-xl border border-success/40 bg-success/5 p-5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-success">
+            <CheckCircle2 className="h-5 w-5" />
+            {adqResult.count} adquirencias cargadas para {month} {year}.
+          </div>
+          <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Summary label="Consumo total" value={cop.format(adqResult.consumo)} />
+            <Summary label="Neto abonado" value={cop.format(adqResult.neto)} />
+            <Summary label="Comisión + retenciones" value={cop.format(adqResult.comision)} />
+          </dl>
+        </div>
+
+        <p className="mt-4 text-sm text-ink-soft">
+          El cruce contra el recaudo TC se calcula en vivo en la conciliación.{" "}
+          <Link href="/conciliaciones/davivienda-7772" className="font-medium text-primary hover:underline">
+            Ver conciliación del Davivienda 7772 → pestaña Tarjeta de crédito
+          </Link>
+          .
+        </p>
+      </div>
+    );
   }
 
   if (result) {
@@ -71,11 +147,7 @@ export default function NuevaCargaPage() {
           </div>
           <Link
             href="/cargas/nueva"
-            onClick={() => {
-              setResult(null);
-              setStep(0);
-              setBankFile(null);
-            }}
+            onClick={resetWizard}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-sm text-ink-soft transition hover:bg-white"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -122,7 +194,9 @@ export default function NuevaCargaPage() {
             setAccountId={setAccountId}
           />
         )}
-        {step === 1 && <UploadStep bankFile={bankFile} setBankFile={setBankFile} />}
+        {step === 1 && (
+          <UploadStep bankFile={bankFile} setBankFile={setBankFile} isAdquirencias={isAdquirencias} />
+        )}
         {step === 2 && (
           <ConfirmStep
             account={account}
@@ -130,6 +204,7 @@ export default function NuevaCargaPage() {
             month={month}
             bankFile={bankFile}
             error={error}
+            isAdquirencias={isAdquirencias}
           />
         )}
       </div>
@@ -155,19 +230,19 @@ export default function NuevaCargaPage() {
           </button>
         ) : (
           <button
-            onClick={runConciliacion}
+            onClick={runCarga}
             disabled={loading}
             className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
           >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Conciliando…
+                {isAdquirencias ? "Cargando…" : "Conciliando…"}
               </>
             ) : (
               <>
                 <Check className="h-4 w-4" />
-                Confirmar y conciliar
+                {isAdquirencias ? "Confirmar y cargar" : "Confirmar y conciliar"}
               </>
             )}
           </button>
@@ -309,10 +384,32 @@ function ConfigStep({
 function UploadStep({
   bankFile,
   setBankFile,
+  isAdquirencias,
 }: {
   bankFile: File | null;
   setBankFile: (f: File | null) => void;
+  isAdquirencias: boolean;
 }) {
+  if (isAdquirencias) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold">Cargar archivo de adquirencias (TC)</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          Sube el archivo de adquirencias del adquirente en <b>Excel</b> (.xlsx). Alimenta el
+          cruce del recaudo por tarjeta de crédito del Davivienda 7772.
+        </p>
+        <div className="mt-5 grid gap-4 sm:max-w-md">
+          <FileDrop
+            icon={<FileText className="h-6 w-6" />}
+            title="Archivo de adquirencias (.xlsx)"
+            accept=".xlsx,.xls"
+            file={bankFile}
+            onFile={setBankFile}
+          />
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
       <h2 className="text-lg font-semibold">Cargar extracto del banco</h2>
@@ -380,24 +477,27 @@ function ConfirmStep({
   month,
   bankFile,
   error,
+  isAdquirencias,
 }: {
   account: BankAccount | null;
   year: number;
   month: string;
   bankFile: File | null;
   error: string | null;
+  isAdquirencias: boolean;
 }) {
   return (
     <div>
-      <h2 className="text-lg font-semibold">Confirmar y conciliar</h2>
+      <h2 className="text-lg font-semibold">{isAdquirencias ? "Confirmar y cargar" : "Confirmar y conciliar"}</h2>
       <p className="mt-1 text-sm text-ink-soft">
-        Revisa los datos. Al confirmar, la app convierte el extracto y lo cruza
-        contra los pagos del período sincronizados desde Metabase (Cartera 360).
+        {isAdquirencias
+          ? "Revisa los datos. Al confirmar, se guarda el archivo de adquirencias del período (reemplaza el anterior) y el cruce TC se recalcula en la conciliación del 7772."
+          : "Revisa los datos. Al confirmar, la app convierte el extracto y lo cruza contra los pagos del período sincronizados desde Metabase (Cartera 360)."}
       </p>
       <dl className="mt-5 divide-y divide-line rounded-lg border border-line">
-        <Row label="Cuenta" value={account ? `${account.bank} ${account.accountNumber}` : "—"} />
+        <Row label="Cuenta" value={account ? `${account.bank}${account.accountNumber ? " " + account.accountNumber : ""}` : "—"} />
         <Row label="Período" value={`${month} ${year}`} />
-        <Row label="Extracto del banco" value={bankFile?.name ?? "—"} />
+        <Row label={isAdquirencias ? "Archivo de adquirencias" : "Extracto del banco"} value={bankFile?.name ?? "—"} />
       </dl>
       {error && (
         <div className="mt-4 flex items-center gap-2 rounded-md border border-error bg-error/5 px-4 py-3 text-sm text-error">
@@ -423,6 +523,15 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between px-4 py-3">
       <dt className="text-sm text-ink-soft">{label}</dt>
       <dd className="max-w-[60%] truncate text-sm font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function Summary({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <dt className="text-xs text-ink-soft">{label}</dt>
+      <dd className="mt-1 text-lg font-bold tabular-nums">{value}</dd>
     </div>
   );
 }

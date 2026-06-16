@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Landmark, ArrowRight, Lock } from "lucide-react";
-import { BANK_ACCOUNTS } from "@/lib/banks";
+import { CONCILIABLE_ACCOUNTS } from "@/lib/banks";
 
 export default function ConciliacionesPage() {
   return (
@@ -12,7 +12,7 @@ export default function ConciliacionesPage() {
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {BANK_ACCOUNTS.map((a) => (
+        {CONCILIABLE_ACCOUNTS.map((a) => (
           <div
             key={a.id}
             className="flex flex-col rounded-xl border border-line bg-white p-5 shadow-sm"

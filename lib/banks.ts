@@ -64,12 +64,18 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     id: "adquirencias",
     bank: "Adquirencias",
     accountNumber: "",
-    alias: "Adquirencias · Recaudo por tarjetas/pasarela",
+    alias: "Adquirencias · Recaudo por tarjeta de crédito (TC) del 7772",
     type: "pagos",
     format: "excel",
-    enabled: false,
+    enabled: true,
   },
 ];
+
+// Cuentas que se concilian de forma independiente (tienen su propio extracto y
+// vista de detalle). Las de tipo "pagos" (ej. adquirencias) son cargas que
+// alimentan la conciliación de otra cuenta, así que NO aparecen como conciliación
+// propia, pero sí se pueden cargar desde Cargas.
+export const CONCILIABLE_ACCOUNTS = BANK_ACCOUNTS.filter((a) => a.type !== "pagos");
 
 export function getAccount(id: string): BankAccount | undefined {
   return BANK_ACCOUNTS.find((a) => a.id === id);
