@@ -147,6 +147,29 @@ create table if not exists adquirencias (
 );
 create index if not exists idx_adq_period on adquirencias(period);
 
+-- PSE (recaudo PSE del 7772, archivo "Transacciones ACH"). Cada fila es una
+-- transacción PSE aprobada (débito en cuenta del cliente) abonada al 7772.
+-- Carga aparte por período; se reemplaza completa (delete por período + insert).
+create table if not exists pse_transactions (
+  id                bigserial primary key,
+  period            text not null,
+  cus               text,
+  fecha             date,
+  hora              text,
+  valor             numeric,
+  banco_originador  text,
+  pagador           text,   -- Referencia 1 (NIT/CC del pagador)
+  tipo_usuario      text,
+  estado            text,
+  medio_pago        text,
+  cod_autorizacion  text,
+  ticket_id         text,
+  servicio          text,
+  cuenta_destino    text,
+  created_at        timestamptz default now()
+);
+create index if not exists idx_pse_period on pse_transactions(period);
+
 create index if not exists idx_b360_bill on bills_360(bill_id);
 create index if not exists idx_b360_period on bills_360(period);
 create index if not exists idx_b360_company on bills_360(company_id);

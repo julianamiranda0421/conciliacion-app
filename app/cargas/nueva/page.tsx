@@ -20,8 +20,14 @@ import type { ReconResult } from "@/lib/reconcile";
 const YEARS = [2025, 2026];
 const STEPS = ["Configurar", "Cargar archivo", "Confirmar"];
 
+// Tipo de carga: extracto bancario, adquirencias (TC) o PSE.
+type LoadKind = "extract" | "adquirencias" | "pse";
+
 // Resumen que devuelve /api/adquirencias al cargar el archivo TC.
 type AdqSummary = { count: number; consumo: number; neto: number; comision: number };
+
+// Resumen que devuelve /api/pse al cargar el archivo de PSE.
+type PseSummary = { count: number; nAprobadas: number; total: number };
 
 const cop = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -40,11 +46,15 @@ export default function NuevaCargaPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReconResult | null>(null);
   const [adqResult, setAdqResult] = useState<AdqSummary | null>(null);
+  const [pseResult, setPseResult] = useState<PseSummary | null>(null);
 
   const account = BANK_ACCOUNTS.find((a) => a.id === accountId) ?? null;
-  // Adquirencias (TC): es una carga "aparte" (no es un extracto bancario). Sube a
-  // /api/adquirencias y alimenta la conciliación TC del 7772.
+  // Cargas "aparte" (no son un extracto bancario): adquirencias (TC) y PSE.
+  // Suben a su propio endpoint y alimentan los canales del 7772.
   const isAdquirencias = account?.id === "adquirencias";
+  const isPse = account?.id === "pse";
+  const isAparte = isAdquirencias || isPse;
+  const kind: LoadKind = isPse ? "pse" : isAdquirencias ? "adquirencias" : "extract";
   const canStep0 = !!account && account.enabled;
   const canStep1 = !!bankFile;
 
@@ -53,7 +63,16 @@ export default function NuevaCargaPage() {
     setLoading(true);
     setError(null);
     try {
-      if (isAdquirencias) {
+      if (isPse) {
+        const fd = new FormData();
+        fd.append("file", bankFile);
+        fd.append("periodo", `${month} ${year}`);
+        fd.append("cutoff", cutoff);
+        const res = await fetch("/api/pse", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Error al cargar PSE");
+        setPseResult(data as PseSummary);
+      } else if (isAdquirencias) {
         const fd = new FormData();
         fd.append("file", bankFile);
         fd.append("periodo", `${month} ${year}`);
@@ -84,8 +103,52 @@ export default function NuevaCargaPage() {
   function resetWizard() {
     setResult(null);
     setAdqResult(null);
+    setPseResult(null);
     setStep(0);
     setBankFile(null);
+  }
+
+  if (pseResult) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">PSE cargado</h1>
+            <p className="mt-1 text-sm text-ink-soft">
+              {month} {year}
+              {cutoff ? ` · corte ${cutoff}` : ""}
+            </p>
+          </div>
+          <Link
+            href="/cargas/nueva"
+            onClick={resetWizard}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-sm text-ink-soft transition hover:bg-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Nueva carga
+          </Link>
+        </div>
+
+        <div className="mt-6 rounded-xl border border-success/40 bg-success/5 p-5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-success">
+            <CheckCircle2 className="h-5 w-5" />
+            {pseResult.count} transacciones PSE cargadas para {month} {year}.
+          </div>
+          <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Summary label="Transacciones aprobadas" value={pseResult.nAprobadas.toLocaleString("es-CO")} />
+            <Summary label="Total recaudado (aprobadas)" value={cop.format(pseResult.total)} />
+          </dl>
+        </div>
+
+        <p className="mt-4 text-sm text-ink-soft">
+          El detalle queda disponible en la conciliación.{" "}
+          <Link href="/conciliaciones/davivienda-7772" className="font-medium text-primary hover:underline">
+            Ver conciliación del Davivienda 7772 → pestaña PSE
+          </Link>
+          .
+        </p>
+      </div>
+    );
   }
 
   if (adqResult) {
@@ -195,7 +258,7 @@ export default function NuevaCargaPage() {
           />
         )}
         {step === 1 && (
-          <UploadStep bankFile={bankFile} setBankFile={setBankFile} isAdquirencias={isAdquirencias} />
+          <UploadStep bankFile={bankFile} setBankFile={setBankFile} kind={kind} />
         )}
         {step === 2 && (
           <ConfirmStep
@@ -204,7 +267,7 @@ export default function NuevaCargaPage() {
             month={month}
             bankFile={bankFile}
             error={error}
-            isAdquirencias={isAdquirencias}
+            kind={kind}
           />
         )}
       </div>
@@ -237,12 +300,12 @@ export default function NuevaCargaPage() {
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {isAdquirencias ? "Cargando…" : "Conciliando…"}
+                {isAparte ? "Cargando…" : "Conciliando…"}
               </>
             ) : (
               <>
                 <Check className="h-4 w-4" />
-                {isAdquirencias ? "Confirmar y cargar" : "Confirmar y conciliar"}
+                {isAparte ? "Confirmar y cargar" : "Confirmar y conciliar"}
               </>
             )}
           </button>
@@ -384,13 +447,33 @@ function ConfigStep({
 function UploadStep({
   bankFile,
   setBankFile,
-  isAdquirencias,
+  kind,
 }: {
   bankFile: File | null;
   setBankFile: (f: File | null) => void;
-  isAdquirencias: boolean;
+  kind: LoadKind;
 }) {
-  if (isAdquirencias) {
+  if (kind === "pse") {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold">Cargar archivo de PSE</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          Sube el archivo de recaudo PSE (&quot;Transacciones ACH&quot;) en <b>Excel</b> (.xlsx).
+          Alimenta el detalle del canal PSE del Davivienda 7772.
+        </p>
+        <div className="mt-5 grid gap-4 sm:max-w-md">
+          <FileDrop
+            icon={<FileText className="h-6 w-6" />}
+            title="Archivo de PSE (.xlsx)"
+            accept=".xlsx,.xls"
+            file={bankFile}
+            onFile={setBankFile}
+          />
+        </div>
+      </div>
+    );
+  }
+  if (kind === "adquirencias") {
     return (
       <div>
         <h2 className="text-lg font-semibold">Cargar archivo de adquirencias (TC)</h2>
@@ -477,27 +560,32 @@ function ConfirmStep({
   month,
   bankFile,
   error,
-  isAdquirencias,
+  kind,
 }: {
   account: BankAccount | null;
   year: number;
   month: string;
   bankFile: File | null;
   error: string | null;
-  isAdquirencias: boolean;
+  kind: LoadKind;
 }) {
+  const isAparte = kind !== "extract";
+  const texto =
+    kind === "pse"
+      ? "Revisa los datos. Al confirmar, se guarda el archivo de PSE del período (reemplaza el anterior) y queda disponible en la pestaña PSE de la conciliación del 7772."
+      : kind === "adquirencias"
+        ? "Revisa los datos. Al confirmar, se guarda el archivo de adquirencias del período (reemplaza el anterior) y el cruce TC se recalcula en la conciliación del 7772."
+        : "Revisa los datos. Al confirmar, la app convierte el extracto y lo cruza contra los pagos del período sincronizados desde Metabase (Cartera 360).";
+  const archivoLabel =
+    kind === "pse" ? "Archivo de PSE" : kind === "adquirencias" ? "Archivo de adquirencias" : "Extracto del banco";
   return (
     <div>
-      <h2 className="text-lg font-semibold">{isAdquirencias ? "Confirmar y cargar" : "Confirmar y conciliar"}</h2>
-      <p className="mt-1 text-sm text-ink-soft">
-        {isAdquirencias
-          ? "Revisa los datos. Al confirmar, se guarda el archivo de adquirencias del período (reemplaza el anterior) y el cruce TC se recalcula en la conciliación del 7772."
-          : "Revisa los datos. Al confirmar, la app convierte el extracto y lo cruza contra los pagos del período sincronizados desde Metabase (Cartera 360)."}
-      </p>
+      <h2 className="text-lg font-semibold">{isAparte ? "Confirmar y cargar" : "Confirmar y conciliar"}</h2>
+      <p className="mt-1 text-sm text-ink-soft">{texto}</p>
       <dl className="mt-5 divide-y divide-line rounded-lg border border-line">
         <Row label="Cuenta" value={account ? `${account.bank}${account.accountNumber ? " " + account.accountNumber : ""}` : "—"} />
         <Row label="Período" value={`${month} ${year}`} />
-        <Row label={isAdquirencias ? "Archivo de adquirencias" : "Extracto del banco"} value={bankFile?.name ?? "—"} />
+        <Row label={archivoLabel} value={bankFile?.name ?? "—"} />
       </dl>
       {error && (
         <div className="mt-4 flex items-center gap-2 rounded-md border border-error bg-error/5 px-4 py-3 text-sm text-error">

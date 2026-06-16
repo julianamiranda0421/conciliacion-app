@@ -6,6 +6,7 @@ import type { BankMovement } from "./parseBank";
 import type { Conciliado } from "./reconcile";
 import type { Bill360Raw } from "./metabase";
 import type { Adquirencia } from "./parseAdquirencias";
+import type { PseRow } from "./parsePse";
 
 async function insertChunked(table: string, rows: Record<string, unknown>[]) {
   const sb = getSupabase();
@@ -440,6 +441,74 @@ export async function getAdquirencias(period: string): Promise<Adquirencia[]> {
       });
     }
     if (rows.length < size) break;
+  }
+  return out;
+}
+
+// ---- PSE (recaudo PSE del 7772 — "Transacciones ACH") ----
+// Carga aparte por período; se reemplaza completa (delete por período + insert).
+// Por ahora solo detalle (sin cruce). Defensivas: si la tabla no existe, no rompen.
+export async function savePse(period: string, rows: PseRow[]) {
+  const sb = getSupabase();
+  await sb.from("pse_transactions").delete().eq("period", period);
+  await insertChunked(
+    "pse_transactions",
+    rows.map((r) => ({
+      period,
+      cus: r.cus,
+      fecha: r.fecha || null,
+      hora: r.hora || null,
+      valor: r.valor,
+      banco_originador: r.bancoOriginador,
+      pagador: r.pagador,
+      tipo_usuario: r.tipoUsuario,
+      estado: r.estado,
+      medio_pago: r.medioPago,
+      cod_autorizacion: r.codAutorizacion,
+      ticket_id: r.ticketId,
+      servicio: r.servicio,
+      cuenta_destino: r.cuentaDestino,
+    })),
+  );
+}
+
+export async function getPse(period: string): Promise<PseRow[]> {
+  const out: PseRow[] = [];
+  const size = 1000;
+  try {
+    const sb = getSupabase();
+    for (let from = 0; ; from += size) {
+      const { data, error } = await sb
+        .from("pse_transactions")
+        .select(
+          "cus,fecha,hora,valor,banco_originador,pagador,tipo_usuario,estado,medio_pago,cod_autorizacion,ticket_id,servicio,cuenta_destino",
+        )
+        .eq("period", period)
+        .range(from, from + size - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as Record<string, unknown>[];
+      for (const r of rows) {
+        out.push({
+          cus: String(r.cus ?? ""),
+          fecha: String(r.fecha ?? ""),
+          hora: String(r.hora ?? ""),
+          valor: Number(r.valor) || 0,
+          bancoOriginador: String(r.banco_originador ?? ""),
+          pagador: String(r.pagador ?? ""),
+          tipoUsuario: String(r.tipo_usuario ?? ""),
+          estado: String(r.estado ?? ""),
+          medioPago: String(r.medio_pago ?? ""),
+          codAutorizacion: String(r.cod_autorizacion ?? ""),
+          ticketId: String(r.ticket_id ?? ""),
+          servicio: String(r.servicio ?? ""),
+          cuentaDestino: String(r.cuenta_destino ?? ""),
+        });
+      }
+      if (rows.length < size) break;
+    }
+  } catch (e) {
+    console.warn("getPse omitido:", e instanceof Error ? e.message : e);
+    return [];
   }
   return out;
 }

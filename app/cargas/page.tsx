@@ -60,6 +60,8 @@ export default async function CargasPage() {
                       <span className="rounded-md bg-primary-light px-2 py-1 text-xs font-medium text-primary">Transactions</span>
                     ) : l.scope === "adquirencias-7772" ? (
                       <span className="rounded-md bg-primary-light px-2 py-1 text-xs font-medium text-primary">Adquirencias (TC)</span>
+                    ) : l.scope === "pse-7772" ? (
+                      <span className="rounded-md bg-primary-light px-2 py-1 text-xs font-medium text-primary">PSE</span>
                     ) : (
                       accountLabel(l.scope)
                     )}

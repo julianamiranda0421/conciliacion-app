@@ -69,6 +69,15 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     format: "excel",
     enabled: true,
   },
+  {
+    id: "pse",
+    bank: "PSE",
+    accountNumber: "",
+    alias: "PSE · Recaudo PSE del 7772 (archivo Transacciones ACH)",
+    type: "pagos",
+    format: "excel",
+    enabled: true,
+  },
 ];
 
 // Cuentas que se concilian de forma independiente (tienen su propio extracto y
