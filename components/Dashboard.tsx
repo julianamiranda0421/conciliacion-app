@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import type { ReconResult } from "@/lib/reconcile";
+import { accountLabel } from "@/lib/banks";
 
 const money = (v: unknown) =>
   v == null || v === ""
@@ -204,6 +206,52 @@ export function Dashboard({
     return r;
   }, [rawRows, filters, sortKey, sortAsc]);
 
+  // Descarga el detalle conciliado del período actual en un libro de Excel:
+  // una hoja de Resumen (KPIs) + una hoja por cada pestaña con sus columnas.
+  function exportExcel() {
+    const wb = XLSX.utils.book_new();
+
+    // Hoja Resumen: encabezado de la cuenta/período y KPIs.
+    const resumenAoa: (string | number)[][] = [
+      ["Conciliación bancaria"],
+      ["Cuenta", accountLabel(accountId)],
+      ["Período", period],
+      [],
+      ["Total ingreso al banco", k.totalIngresoBanco],
+      ["Total ingreso conciliado", k.totalConc],
+      ["Cruces conciliados", k.nConc],
+      isAch
+        ? ["Diferencia", k.diferenciaValor]
+        : ["Cheques devueltos (valor)", k.totalDevValor],
+      ["Pendiente por conciliar", k.totalPendiente],
+    ];
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoa);
+    wsResumen["!cols"] = [{ wch: 28 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+
+    // Una hoja por pestaña, usando las mismas columnas/etiquetas de la vista.
+    for (const t of TABS) {
+      const data = (result[t.id] as Record<string, unknown>[]) ?? [];
+      const headers = t.cols.map((c) => c.label);
+      const aoa = data.map((row) =>
+        t.cols.map((c) => {
+          const v = row[c.key];
+          if (c.num) return v == null || v === "" ? "" : Number(v);
+          return v == null ? "" : String(v);
+        }),
+      );
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...aoa]);
+      ws["!cols"] = t.cols.map((c) => ({ wch: c.num ? 16 : Math.max(c.label.length + 2, 14) }));
+      // Nombre de hoja: sin emojis y máx. 31 caracteres (límite de Excel).
+      const name =
+        t.label.replace(/[^\p{L}\p{N} ]/gu, "").trim().slice(0, 31) || String(t.id);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    }
+
+    const safe = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
+    XLSX.writeFile(wb, `Conciliacion_${safe(accountLabel(accountId))}_${safe(period)}.xlsx`);
+  }
+
   const k = result.resumen;
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
@@ -347,7 +395,17 @@ export function Dashboard({
             </select>
           );
         })}
-        <span className="ml-auto text-sm text-ink-soft">{rows.length} filas</span>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={exportExcel}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm text-ink-soft transition hover:border-success hover:text-success"
+            title={`Descargar el detalle de ${period} en Excel`}
+          >
+            <Download className="h-4 w-4" />
+            Descargar Excel
+          </button>
+          <span className="text-sm text-ink-soft">{rows.length} filas</span>
+        </div>
       </div>
 
       {tab.id === "dev" && rows.length > 0 && (
