@@ -23,6 +23,13 @@ export type ChequeConfig = {
   // contra cualquier transacción cuya factura aparezca en el recaudo del banco
   // (no se restringe por método). Útil para Davivienda 7772.
   restrictTxnsToRecaudoBills?: boolean;
+  // Si true (junto con restrictTxnsToRecaudoBills): el recaudo también cruza contra
+  // transacciones cuyo VALOR coincida con un recaudo del banco aunque la factura no
+  // aparezca exacta (factura recortada/distinta). Hace el cruce MÉTODO-AGNÓSTICO sin
+  // meter ruido: el extracto del banco ("RECAUDO VALIDACION") es la autoridad, no el
+  // método con que la plataforma haya etiquetado el pago (a veces "no identificado").
+  // Útil para Bancolombia 8465.
+  restrictAlsoByValue?: boolean;
   // Si true: la cuenta tiene VARIOS canales en el mismo extracto (físico + TC + PSE),
   // así que "ingreso al banco" y "movimientos" de esta vista se limitan al recaudo
   // físico/cheque (no a todos los positivos del extracto). Útil para Davivienda 7772.
@@ -168,8 +175,13 @@ export function reconcile(
   // Cuando el recaudo se aplica por varios métodos (7772), solo se consideran las
   // transacciones cuya factura aparece en el recaudo del banco (match por factura).
   const recaudoBills = new Set(recaudos.map((r) => r.bill));
+  const recaudoValores = new Set(recaudos.map((r) => r.valor));
   const txnsToMatch = cfg.restrictTxnsToRecaudoBills
-    ? txns.filter((t) => recaudoBills.has(t.billId))
+    ? txns.filter(
+        (t) =>
+          recaudoBills.has(t.billId) ||
+          (cfg.restrictAlsoByValue && recaudoValores.has(t.amount)),
+      )
     : txns;
 
   for (const t of txnsToMatch) {
@@ -573,6 +585,16 @@ export function reconcileAch(
 // Dispatcher por cuenta
 // Recaudo físico/cheque por cuenta cuando NO es Bancolombia 8465.
 const CHEQUE_CONFIG: Record<string, ChequeConfig> = {
+  // Bancolombia 8465: recaudo físico efectivo/cheque. El recaudo del banco cruza
+  // contra cualquier pago SUCCESS de esa factura/valor SIN depender del método con
+  // que la plataforma lo etiquetó (a veces "Método de pago no identificado"/BANK).
+  // restrictAlsoByValue evita el ruido y conserva los cruces por valor (factura recortada).
+  "bancolombia-8465": {
+    conceptos: CONCEPTOS_RECAUDO,
+    billOf: (m) => m.billId,
+    restrictTxnsToRecaudoBills: true,
+    restrictAlsoByValue: true,
+  },
   // Davivienda 7772: recaudo físico/cheque. Conceptos del extracto y la factura
   // va en Referencia 1 (parser la deja en ref2, con ceros a la izquierda).
   "davivienda-7772": {

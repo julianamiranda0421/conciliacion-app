@@ -54,20 +54,19 @@ function esTransferencia(r: TxnRow): boolean {
 
 // Filtro de transactions que entran a cada cuenta bancaria.
 // Fuente = bills_360 (Metabase). El recaudo de cada cuenta llega por un canal distinto:
-//  - 8465: recaudo físico Bancolombia (efectivo/cheque) = PHYSICAL + nombre con "Bancolombia".
+//  - 8465: recaudo físico efectivo/cheque; se pasan TODAS las txns y el motor cruza por
+//    factura/valor del recaudo del banco (método-agnóstico, ver reconcile.ts).
 //  - 5571/1800/1144: transferencias bancarias (FINANCE_TRANSFER); el motor agrupa por giro
 //    (payment_date) y cuadra cada depósito del banco por valor.
 //  - 7772: cheque/físico aplicado por varios métodos; se pasan TODAS y el motor cruza por factura.
 export function filterForAccount(accountId: string, rows: TxnRow[]): Transaction[] {
   switch (accountId) {
     case "bancolombia-8465":
-      return rows
-        .filter(
-          (r) =>
-            r.paymentMethodName.includes("Bancolombia") &&
-            r.paymentMethodType === "PHYSICAL",
-        )
-        .map(map);
+      // Método-agnóstico: el recaudo físico a veces se registra con método "no
+      // identificado"/BANK en vez de Bancolombia/PHYSICAL. El motor (reconcile con
+      // restrictTxnsToRecaudoBills + restrictAlsoByValue) las restringe por factura/valor
+      // del recaudo del banco, que es la autoridad. Se pasan TODAS las transacciones.
+      return rows.map(map);
     case "davivienda-5571":
     case "bancolombia-1800":
     case "bancolombia-1144":
