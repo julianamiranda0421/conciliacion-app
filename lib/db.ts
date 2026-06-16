@@ -784,6 +784,7 @@ export async function enrichConciliado(
       periodoFactura: m?.period ?? "—",
       valorFactura: m?.total != null ? Number(m.total) : c.totalFactura,
       statusFactura: m ? (m.is_partial_payment ? m.bill_status ?? "PARCIAL" : "SUCCESS") : "SUCCESS",
+      pago: m?.is_partial_payment ? "Pago parcial" : "OK",
       observacion: obs[String(c.transactionId)] ?? "",
     };
   });

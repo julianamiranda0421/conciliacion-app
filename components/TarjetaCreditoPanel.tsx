@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { TcResult } from "@/lib/reconcileTC";
+import { fmtDate, signClass } from "@/lib/format";
 
 // Mismo formato de moneda que el Conciliado físico ("$927.240").
 const cop = (n: number) => "$" + Number(n).toLocaleString("es-CO", { maximumFractionDigits: 0 });
@@ -90,9 +91,9 @@ export function TarjetaCreditoPanel({
             <tbody>
               {r.porDia.map((d) => (
                 <tr key={d.fecha} className={Math.abs(d.diff) >= 2 ? "bg-error/5" : ""}>
-                  <td className="border-b border-line px-4 py-2">{d.fecha}</td>
-                  <td className="border-b border-line px-4 py-2 text-right tabular-nums">{cop(d.netoAdq)}</td>
-                  <td className="border-b border-line px-4 py-2 text-right tabular-nums">{cop(d.bancoNC)}</td>
+                  <td className="border-b border-line px-4 py-2">{fmtDate(d.fecha)}</td>
+                  <td className={`border-b border-line px-4 py-2 text-right tabular-nums ${signClass(d.netoAdq)}`}>{cop(d.netoAdq)}</td>
+                  <td className={`border-b border-line px-4 py-2 text-right tabular-nums ${signClass(d.bancoNC)}`}>{cop(d.bancoNC)}</td>
                   <td className={`border-b border-line px-4 py-2 text-right tabular-nums ${Math.abs(d.diff) >= 2 ? "text-error font-medium" : "text-ink-soft"}`}>{cop(d.diff)}</td>
                 </tr>
               ))}
@@ -145,12 +146,12 @@ export function TarjetaCreditoPanel({
                     <td className={`${base} tabular-nums`}>{d.link?.transactionId ?? "—"}</td>
                     <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-sm">{d.link ? d.link.facturas.join(", ") : "—"}</td>
                     <td className={base}>{d.link?.periodo ?? "—"}</td>
-                    <td className={numCls}>{cop(d.valorFactura)}</td>
-                    <td className={numCls}>{d.link ? cop(d.link.biaCreditos) : "—"}</td>
-                    <td className={numCls}>{cop(d.consumo)}</td>
-                    <td className={numCls}>{cop(d.comisionTotal)}</td>
-                    <td className={numCls}>{cop(d.neto)}</td>
-                    <td className={base}>{d.fechaAbono}</td>
+                    <td className={`${numCls} ${signClass(d.valorFactura)}`}>{cop(d.valorFactura)}</td>
+                    <td className={`${numCls} ${signClass(d.link?.biaCreditos)}`}>{d.link ? cop(d.link.biaCreditos) : "—"}</td>
+                    <td className={`${numCls} ${signClass(d.consumo)}`}>{cop(d.consumo)}</td>
+                    <td className={`${numCls} ${signClass(d.comisionTotal)}`}>{cop(d.comisionTotal)}</td>
+                    <td className={`${numCls} ${signClass(d.neto)}`}>{cop(d.neto)}</td>
+                    <td className={base}>{fmtDate(d.fechaAbono)}</td>
                     <td className={base}>
                       {cruzada ? (
                         <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>

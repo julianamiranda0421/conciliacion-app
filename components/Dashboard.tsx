@@ -6,6 +6,7 @@ import { Trash2, Plus, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { ReconResult } from "@/lib/reconcile";
 import { accountLabel } from "@/lib/banks";
+import { fmtDate, signClass } from "@/lib/format";
 
 const money = (v: unknown) =>
   v == null || v === ""
@@ -24,7 +25,7 @@ type TabDef = {
 
 const TAB_CONCILIADO: TabDef = {
   id: "conciliado",
-  label: "✅ Recaudo Conciliado",
+  label: "Recaudo Conciliado",
   filters: [
     { key: "billIdTxn", label: "Factura", type: "text" },
     { key: "tipo", label: "Tipo Recaudo", type: "select" },
@@ -43,6 +44,7 @@ const TAB_CONCILIADO: TabDef = {
     { key: "diferencia", label: "Diferencia", num: true },
     { key: "tipo", label: "Tipo Recaudo" },
     { key: "statusFactura", label: "Status factura" },
+    { key: "pago", label: "Pago" },
     { key: "fechaBanco", label: "Fecha Ingreso" },
     { key: "observacion", label: "Observaciones" },
   ],
@@ -51,7 +53,7 @@ const TAB_CONCILIADO: TabDef = {
 // 8465 (recaudo PDF)
 const TAB_PENDIENTES: TabDef = {
   id: "pendientes",
-  label: "🟠 Partidas Conciliatorias Pendientes",
+  label: "Partidas Conciliatorias Pendientes",
   filters: [{ key: "status", label: "Status", type: "select" }],
   cols: [
     { key: "fecha", label: "Fecha" },
@@ -64,7 +66,7 @@ const TAB_PENDIENTES: TabDef = {
 };
 const TAB_DEV: TabDef = {
   id: "dev",
-  label: "🚨 Cheques devueltos",
+  label: "Cheques devueltos",
   cols: [
     { key: "fechaDev", label: "Fecha DEV" },
     { key: "documento", label: "Documento" },
@@ -78,7 +80,7 @@ const TAB_DEV: TabDef = {
 // Cuentas ACH (Davivienda, 1800, 1144): clasificación manual recaudo / otros
 const TAB_RECAUDO: TabDef = {
   id: "recaudoPendiente",
-  label: "💧 Partidas conciliatorias recaudo",
+  label: "Partidas conciliatorias recaudo",
   cols: [
     { key: "fecha", label: "Fecha" },
     { key: "concepto", label: "Concepto" },
@@ -90,7 +92,7 @@ const TAB_RECAUDO: TabDef = {
 };
 const TAB_OTROS: TabDef = {
   id: "otrosIngresos",
-  label: "📥 Otros ingresos",
+  label: "Otros ingresos",
   filters: [{ key: "concepto", label: "Concepto", type: "select" }],
   cols: [
     { key: "fecha", label: "Fecha" },
@@ -103,7 +105,7 @@ const TAB_OTROS: TabDef = {
 
 const TAB_MOV: TabDef = {
   id: "movimientos",
-  label: "🏦 Movimientos bancarios",
+  label: "Movimientos bancarios",
   filters: [
     { key: "tran", label: "Tran", type: "select" },
     { key: "descripcion", label: "Concepto", type: "select" },
@@ -530,9 +532,10 @@ export function Dashboard({
 function Cell({ col, value }: { col: Col; value: unknown }) {
   const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm";
   if (col.num) {
-    const diff = col.key === "diferencia" && Number(value) !== 0;
+    // Negativos en rojo, positivos en verde; la diferencia ≠ 0 además en negrita.
+    const bold = col.key === "diferencia" && Number(value) !== 0 ? "font-bold" : "";
     return (
-      <td className={`${base} text-right tabular-nums ${diff ? "font-bold text-error" : ""}`}>
+      <td className={`${base} text-right tabular-nums ${signClass(value)} ${bold}`}>
         {money(value)}
       </td>
     );
@@ -568,6 +571,20 @@ function Cell({ col, value }: { col: Col; value: unknown }) {
       </td>
     );
   }
+  if (col.key === "pago") {
+    const parcial = String(value) === "Pago parcial";
+    return (
+      <td className={base}>
+        <span
+          className={`rounded-md px-2 py-1 text-xs font-bold ${
+            parcial ? "bg-warning/20 text-warning" : "bg-success/15 text-success"
+          }`}
+        >
+          {String(value ?? "OK")}
+        </span>
+      </td>
+    );
+  }
   if (col.key === "status") {
     const v = String(value ?? "");
     const cls =
@@ -582,5 +599,5 @@ function Cell({ col, value }: { col: Col; value: unknown }) {
       </td>
     );
   }
-  return <td className={base}>{value == null ? "" : String(value)}</td>;
+  return <td className={base}>{value == null ? "" : fmtDate(value)}</td>;
 }

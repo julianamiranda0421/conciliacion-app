@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Resumen7772 } from "@/lib/resumen7772";
+import { fmtDate, signClass } from "@/lib/format";
 
 const cop = (n: number) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
@@ -80,11 +81,11 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
           <tbody>
             {movs.map((m, i) => (
               <tr key={i} className="hover:bg-primary-light/40">
-                <td className="whitespace-nowrap border-b border-line px-3 py-2">{m.fecha}</td>
+                <td className="whitespace-nowrap border-b border-line px-3 py-2">{fmtDate(m.fecha)}</td>
                 <td className="border-b border-line px-3 py-2">{m.descripcion}</td>
                 <td className="whitespace-nowrap border-b border-line px-3 py-2">{m.recaudo}</td>
                 <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs text-ink-soft">{m.tran}</td>
-                <td className={`border-b border-line px-3 py-2 text-right tabular-nums ${m.valor < 0 ? "text-error" : ""}`}>{cop(m.valor)}</td>
+                <td className={`border-b border-line px-3 py-2 text-right tabular-nums ${signClass(m.valor)}`}>{cop(m.valor)}</td>
               </tr>
             ))}
           </tbody>

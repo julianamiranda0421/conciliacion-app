@@ -59,6 +59,7 @@ export type Conciliado = {
   periodoFactura?: string;
   valorFactura?: number;
   statusFactura?: string;
+  pago?: string; // "OK" | "Pago parcial" (según is_partial_payment de bills_360)
   observacion?: string; // nota manual (persistida por transaction_id)
 };
 

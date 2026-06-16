@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { PseRow } from "@/lib/parsePse";
+import { fmtDate, signClass } from "@/lib/format";
 
 const money = (v: unknown) =>
   v == null || v === ""
@@ -143,9 +144,9 @@ export function PsePanel({ rows, period }: { rows: PseRow[]; period: string }) {
                     {COLS.map((c) => (
                       <td
                         key={c.key}
-                        className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm ${c.num ? "text-right tabular-nums" : ""}`}
+                        className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm ${c.num ? "text-right tabular-nums " + signClass(row[c.key]) : ""}`}
                       >
-                        {c.num ? money(row[c.key]) : String(row[c.key] ?? "")}
+                        {c.num ? money(row[c.key]) : fmtDate(row[c.key])}
                       </td>
                     ))}
                   </tr>
