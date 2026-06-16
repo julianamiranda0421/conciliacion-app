@@ -255,13 +255,17 @@ export function Dashboard({
   const k = result.resumen;
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
-  const kpis = [
-    { cls: "ok", lbl: "Total ingreso al banco", val: money(k.totalIngresoBanco), sub: k.totalDevValor > 0 ? "neto (− cheques devueltos)" : "todos los ingresos", bar: pctConc },
-    { cls: "ok", lbl: "Total ingreso conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso` },
+  type Kpi = { cls: string; lbl: string; val: string; sub?: string; bar?: number; emphasize?: boolean };
+  const kpis: Kpi[] = [
+    // Total ingreso bancario: sin subtítulo, valor resaltado (más grande).
+    { cls: "ok", lbl: "Total Ingreso Bancario", val: money(k.totalIngresoBanco), emphasize: true },
+    { cls: "ok", lbl: "Recaudo Conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso bancario` },
+    { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por Conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "Ingreso Bancario − Recaudo" },
     isAch
       ? { cls: k.diferenciaValor > 1 ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` }
-      : { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s) · ${k.nCritico} crítico(s)` },
-    { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "ingreso al banco − conciliado" },
+      : { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s)` },
+    // % de lo que ingresó al banco que se cruzó como recaudo.
+    { cls: "ok", lbl: "% Recaudo / Ingreso bancario", val: `${pctConc}%`, sub: "recaudo conciliado vs ingreso", bar: pctConc },
   ];
 
   const valClass = (cls: string) =>
@@ -270,12 +274,12 @@ export function Dashboard({
   return (
     <div>
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {kpis.map((c) => (
           <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
             <div className="text-[11px] uppercase tracking-wide text-ink-soft">{c.lbl}</div>
-            <div className={`mt-1 text-2xl font-bold ${valClass(c.cls)}`}>{c.val}</div>
-            <div className="mt-1 text-xs text-ink-soft">{c.sub}</div>
+            <div className={`mt-1 tabular-nums ${c.emphasize ? "text-3xl font-extrabold" : "text-2xl font-bold"} ${valClass(c.cls)}`}>{c.val}</div>
+            {c.sub && <div className="mt-1 text-xs text-ink-soft">{c.sub}</div>}
             {c.bar != null && (
               <div className="mt-2 h-1 overflow-hidden rounded bg-line">
                 <div className="h-full bg-success" style={{ width: `${c.bar}%` }} />

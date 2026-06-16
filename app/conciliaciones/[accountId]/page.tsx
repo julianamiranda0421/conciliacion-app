@@ -16,6 +16,19 @@ import { resumen7772 } from "@/lib/resumen7772";
 
 export const dynamic = "force-dynamic";
 
+const MESES_LARGOS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+// "2026-06-16" -> "16 de junio del 2026". Devuelve el original si no parsea.
+function formatCorte(d: string): string {
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return d;
+  const [, y, mm, dd] = m;
+  return `${Number(dd)} de ${MESES_LARGOS[Number(mm) - 1] ?? mm} del ${y}`;
+}
+
 export default async function ConciliacionCuentaPage({
   params,
   searchParams,
@@ -46,8 +59,8 @@ export default async function ConciliacionCuentaPage({
         <div>
           <h1 className="text-2xl font-bold">{account.bank} {account.accountNumber}</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            {account.alias} · {period}
-            {cutoff ? ` · al corte ${cutoff}` : ""}
+            Conciliación Bancaria {period}
+            {cutoff ? ` - Corte ${formatCorte(cutoff)}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-3">
