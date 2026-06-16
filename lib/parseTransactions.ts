@@ -1,8 +1,6 @@
-// Lector de la base de transactions (Excel) con SheetJS.
-// parseTransactionsAll -> TODAS las filas (todas las cuentas) para guardarlas.
+// Tipos y filtros de las transactions que consume el motor de conciliación.
+// La fuente es bills_360 (espejo de Metabase); ya no hay cargue manual de Excel.
 // filterForAccount -> subconjunto que aplica a una cuenta bancaria concreta.
-
-import * as XLSX from "xlsx";
 
 export type TxnRow = {
   transactionId: number;
@@ -32,39 +30,6 @@ export type Transaction = {
   s3PathDocument: string;
   paymentGroup?: string; // timestamp del giro (llave de agrupación ACH)
 };
-
-type Row = Record<string, unknown>;
-
-function toDateStr(v: unknown): string {
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === "string") return v.slice(0, 10);
-  return "";
-}
-
-export function parseTransactionsAll(data: Uint8Array): TxnRow[] {
-  const wb = XLSX.read(data, { type: "array", cellDates: true });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Row>(sheet, { defval: null });
-
-  const out: TxnRow[] = [];
-  for (const r of rows) {
-    const txnId = Number(r["Transaction ID"]);
-    if (!txnId) continue;
-    out.push({
-      transactionId: txnId,
-      billId: String(r["Bill ID"] ?? "").trim(),
-      amount: Number(r["Amount"]) || 0,
-      paymentMethodType: String(r["Payment Method Type"] ?? ""),
-      paymentMethodName: String(r["Payment Method Name"] ?? ""),
-      status: String(r["Status"] ?? ""),
-      paymentDate: toDateStr(r["Payment Date"]),
-      collectionType: String(r["Collection Type"] ?? ""),
-      biaCreditsUsed: Number(r["Bia Credits Used"]) || 0,
-      s3PathDocument: String(r["S3 Path Document"] ?? "").trim(),
-    });
-  }
-  return out;
-}
 
 const map = (r: TxnRow): Transaction => ({
   transactionId: r.transactionId,

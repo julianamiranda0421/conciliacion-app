@@ -19,6 +19,7 @@ import {
 import { CarteraControls } from "@/components/CarteraControls";
 import { BankPeriodSelect } from "@/components/BankPeriodSelect";
 import { IngresoVsAplicado } from "@/components/IngresoVsAplicado";
+import { accountLabel } from "@/lib/banks";
 
 export const dynamic = "force-dynamic";
 
@@ -111,21 +112,63 @@ export default async function CarteraPage({
             Aún no hay extractos bancarios conciliados.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="grid grid-cols-2 gap-4 self-start">
-              <Card icon={<Landmark className="h-5 w-5 text-primary" />} label="Ingreso al banco" value={cop.format(caja.ingresoBanco)} />
-              <Card icon={<Receipt className="h-5 w-5 text-success" />} label="Aplicado en facturas" value={cop.format(caja.aplicado)} />
-              <Card
-                icon={<Scale className={`h-5 w-5 ${caja.diferencia === 0 ? "text-success" : "text-error"}`} />}
-                label="Diferencia"
-                value={cop.format(caja.diferencia)}
-                sub={caja.nConDiferencia > 0 ? `${caja.nConDiferencia} con diferencia` : "todo cuadra"}
-                accent={caja.diferencia === 0}
-              />
-              <Card icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Facturas pagadas (conciliadas)" value={nf.format(caja.nFacturas)} />
+          <>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4 self-start">
+                <Card icon={<Landmark className="h-5 w-5 text-primary" />} label="Ingreso al banco" value={cop.format(caja.ingresoBanco)} />
+                <Card icon={<Receipt className="h-5 w-5 text-success" />} label="Aplicado en facturas" value={cop.format(caja.aplicado)} />
+                <Card
+                  icon={<Scale className={`h-5 w-5 ${caja.diferencia === 0 ? "text-success" : "text-error"}`} />}
+                  label="Diferencia"
+                  value={cop.format(caja.diferencia)}
+                  sub={caja.nConDiferencia > 0 ? `${caja.nConDiferencia} con diferencia` : "todo cuadra"}
+                  accent={caja.diferencia === 0}
+                />
+                <Card icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Facturas pagadas (conciliadas)" value={nf.format(caja.nFacturas)} />
+              </div>
+              <IngresoVsAplicado ingresoBanco={caja.ingresoBanco} aplicado={caja.aplicado} />
             </div>
-            <IngresoVsAplicado ingresoBanco={caja.ingresoBanco} aplicado={caja.aplicado} />
-          </div>
+
+            {/* Detalle por cuenta: qué cuenta bancaria cruzó cada pago (antes en Transactions). */}
+            {caja.porCuenta.length > 0 && (
+              <div className="mt-6">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+                  Detalle por cuenta
+                </h3>
+                <div className="overflow-hidden rounded-lg border border-line">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr>
+                          {["Cuenta", "Cruces", "Ingreso al banco", "Aplicado", "Diferencia"].map((h, i) => (
+                            <th
+                              key={h}
+                              className={`whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-[11px] uppercase tracking-wide text-ink-soft ${i === 0 ? "text-left" : "text-right"}`}
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {caja.porCuenta.map((c) => (
+                          <tr key={c.accountId} className="hover:bg-primary-light/40">
+                            <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5">{accountLabel(c.accountId)}</td>
+                            <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-right tabular-nums">{nf.format(c.nFacturas)}</td>
+                            <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-right tabular-nums">{cop.format(c.ingresoBanco)}</td>
+                            <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-right tabular-nums">{cop.format(c.aplicado)}</td>
+                            <td className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-right tabular-nums ${c.diferencia !== 0 ? "font-bold text-error" : ""}`}>
+                              {cop.format(c.diferencia)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

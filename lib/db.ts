@@ -16,67 +16,6 @@ async function insertChunked(table: string, rows: Record<string, unknown>[]) {
   }
 }
 
-// ---- Transactions (base global por período) ----
-export async function saveTransactions(period: string, rows: TxnRow[]) {
-  const sb = getSupabase();
-  await sb.from("transactions").delete().eq("period", period);
-  await insertChunked(
-    "transactions",
-    rows.map((r) => ({
-      period,
-      transaction_id: r.transactionId,
-      bill_id: r.billId,
-      amount: r.amount,
-      payment_method_type: r.paymentMethodType,
-      payment_method_name: r.paymentMethodName,
-      status: r.status,
-      payment_date: r.paymentDate || null,
-      collection_type: r.collectionType,
-      bia_credits_used: r.biaCreditsUsed,
-      s3_path_document: r.s3PathDocument,
-    })),
-  );
-}
-
-export type TxnDbRow = {
-  transaction_id: number;
-  bill_id: string;
-  amount: number;
-  payment_method_type: string;
-  payment_method_name: string;
-  status: string;
-  payment_date: string | null;
-  collection_type: string;
-  bia_credits_used: number | null;
-  s3_path_document: string | null;
-};
-
-export async function getTransactions(period: string): Promise<TxnDbRow[]> {
-  const sb = getSupabase();
-  const out: TxnDbRow[] = [];
-  const size = 1000;
-  for (let from = 0; ; from += size) {
-    const { data, error } = await sb
-      .from("transactions")
-      .select(
-        "transaction_id,bill_id,amount,payment_method_type,payment_method_name,status,payment_date,collection_type,bia_credits_used,s3_path_document",
-      )
-      .eq("period", period)
-      .range(from, from + size - 1);
-    if (error) throw new Error(`getTransactions: ${error.message}`);
-    out.push(...((data ?? []) as TxnDbRow[]));
-    if (!data || data.length < size) break;
-  }
-  return out;
-}
-
-export async function listTransactionPeriods(): Promise<string[]> {
-  const sb = getSupabase();
-  const { data, error } = await sb.from("transactions").select("period");
-  if (error) throw new Error(`listPeriods: ${error.message}`);
-  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))].sort().reverse();
-}
-
 // ---- Transactions para conciliar, leídas de bills_360 (Metabase) ----
 // Reemplaza el cargue manual de la tabla `transactions`. La fuente es bills_360
 // (espejo de Metabase, grano factura×pago). Se traen los pagos cuyo payment_date
@@ -303,24 +242,6 @@ export async function saveCrossings(
       nivel_match: c.nivelMatch,
     })),
   );
-}
-
-export type CrossingDbRow = {
-  account_id: string;
-  transaction_id: number;
-  valor_banco: number;
-  valor_aplicado: number;
-  diferencia: number;
-};
-
-export async function getCrossings(period: string): Promise<CrossingDbRow[]> {
-  const sb = getSupabase();
-  const { data, error } = await sb
-    .from("crossings")
-    .select("account_id,transaction_id,valor_banco,valor_aplicado,diferencia")
-    .eq("period", period);
-  if (error) throw new Error(`getCrossings: ${error.message}`);
-  return (data ?? []) as CrossingDbRow[];
 }
 
 // ---- Registro de cargas (fecha de corte, historial) ----
@@ -816,29 +737,64 @@ export async function getBills360ForTxns(txnIds: number[]): Promise<Bill360Mini[
   return out;
 }
 
+// Desglose de la caja conciliada por cuenta bancaria (qué cuenta cruzó cada pago).
+// Reemplaza la columna "Cuenta cruce" que mostraba el módulo Transactions.
+export type CajaCuenta = {
+  accountId: string;
+  nFacturas: number;
+  ingresoBanco: number;
+  aplicado: number;
+  diferencia: number;
+  nConDiferencia: number;
+};
+
 export type CajaConciliada = {
   ingresoBanco: number;
   aplicado: number;
   diferencia: number;
   nFacturas: number;
   nConDiferencia: number;
+  porCuenta: CajaCuenta[];
 };
 
 export async function getCajaConciliada(bankPeriod?: string): Promise<CajaConciliada> {
   const sb = getSupabase();
-  let q = sb.from("crossings").select("valor_banco,valor_aplicado,diferencia");
+  let q = sb.from("crossings").select("account_id,valor_banco,valor_aplicado,diferencia");
   if (bankPeriod) q = q.eq("period", bankPeriod);
   const { data, error } = await q;
   if (error) throw new Error(`getCajaConciliada: ${error.message}`);
-  const rows = (data ?? []) as { valor_banco: number; valor_aplicado: number; diferencia: number }[];
+  const rows = (data ?? []) as {
+    account_id: string;
+    valor_banco: number;
+    valor_aplicado: number;
+    diferencia: number;
+  }[];
   const ingresoBanco = rows.reduce((s, r) => s + (Number(r.valor_banco) || 0), 0);
   const aplicado = rows.reduce((s, r) => s + (Number(r.valor_aplicado) || 0), 0);
   const diferencia = rows.reduce((s, r) => s + (Number(r.diferencia) || 0), 0);
+
+  // Agregado por cuenta, ordenado por ingreso al banco (mayor primero).
+  const map = new Map<string, CajaCuenta>();
+  for (const r of rows) {
+    const id = r.account_id;
+    const e =
+      map.get(id) ??
+      { accountId: id, nFacturas: 0, ingresoBanco: 0, aplicado: 0, diferencia: 0, nConDiferencia: 0 };
+    e.nFacturas += 1;
+    e.ingresoBanco += Number(r.valor_banco) || 0;
+    e.aplicado += Number(r.valor_aplicado) || 0;
+    e.diferencia += Number(r.diferencia) || 0;
+    if (Number(r.diferencia) !== 0) e.nConDiferencia += 1;
+    map.set(id, e);
+  }
+  const porCuenta = [...map.values()].sort((a, b) => b.ingresoBanco - a.ingresoBanco);
+
   return {
     ingresoBanco,
     aplicado,
     diferencia,
     nFacturas: rows.length,
     nConDiferencia: rows.filter((r) => Number(r.diferencia) !== 0).length,
+    porCuenta,
   };
 }
