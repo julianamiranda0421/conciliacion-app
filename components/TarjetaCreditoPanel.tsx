@@ -57,10 +57,10 @@ export function TarjetaCreditoPanel({
   const pctRecaudo = ingresoNeto > 0 ? Math.round((valorConciliado / ingresoNeto) * 100) : 0;
 
   const valClass = (cls: string) =>
-    cls === "ok" ? "text-success" : cls === "bad" ? "text-error" : cls === "warn" ? "text-warning" : "";
+    cls === "ok" ? "text-success" : cls === "bad" ? "text-error" : cls === "warn" ? "text-warning" : cls === "primary" ? "text-primary" : "";
   const kpis: { cls: string; lbl: string; val: string; sub?: string; bar?: number }[] = [
-    { cls: "ok", lbl: "Ingreso Bancario", val: cop(ingresoBancario), sub: "Nc del banco por TC (sin comisión)" },
-    { cls: "neutral", lbl: "Adquirencias", val: cop(adquirencias), sub: "comisiones del adquirente" },
+    { cls: "primary", lbl: "Ingreso Bancario", val: cop(ingresoBancario), sub: "Nc del banco por TC (sin comisión)" },
+    { cls: "primary", lbl: "Adquirencias", val: cop(adquirencias), sub: "comisiones del adquirente" },
     { cls: "ok", lbl: "Ingreso neto", val: cop(ingresoNeto), sub: "Ingreso Bancario + Adquirencias" },
     { cls: "ok", lbl: "Valor conciliado", val: cop(valorConciliado), sub: `${r.nEnlazadas} de ${r.nAdq} adquirencias cruzadas` },
     { cls: Math.abs(pendiente) > 1 ? "bad" : "ok", lbl: "Pendiente de conciliar", val: cop(pendiente), sub: "Ingreso neto − Valor conciliado" },
