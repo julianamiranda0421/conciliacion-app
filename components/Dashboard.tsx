@@ -502,8 +502,8 @@ export function Dashboard({
                           const val = notes[id] ?? String(row.observacion ?? "");
                           const hasDiff = Number(row.diferencia) !== 0;
                           return (
-                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
-                              <div className="flex items-center gap-1.5">
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">
+                              <div className="flex items-center justify-center gap-1.5">
                                 <input
                                   value={val}
                                   onChange={(e) => setNotes((p) => ({ ...p, [id]: e.target.value }))}
@@ -529,8 +529,8 @@ export function Dashboard({
                           const key = "dev:" + doc;
                           const val = notes[key] ?? String(row.observacion ?? "");
                           return (
-                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
-                              <div className="flex items-center gap-1.5">
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">
+                              <div className="flex items-center justify-center gap-1.5">
                                 <input
                                   value={val}
                                   onChange={(e) => setNotes((p) => ({ ...p, [key]: e.target.value }))}
@@ -551,7 +551,7 @@ export function Dashboard({
                         // Otros ingresos: botón para marcar como recaudo
                         if (tab.id === "otrosIngresos" && c.key === "accion") {
                           return (
-                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">
                               <button
                                 onClick={() => setRecaudo(sig, true)}
                                 disabled={rowBusy}
@@ -566,7 +566,7 @@ export function Dashboard({
                         // Recaudo: acción = borrar (solo las marcadas a mano)
                         if (tab.id === "recaudoPendiente" && c.key === "accion") {
                           return (
-                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">
                               {row.manual ? (
                                 <button
                                   onClick={() => setRecaudo(sig, false)}
@@ -598,14 +598,14 @@ export function Dashboard({
                         return (
                           <td
                             key={c.key}
-                            className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-right text-sm tabular-nums ${signClass(sum)}`}
+                            className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(sum)}`}
                           >
                             {money(sum)}
                           </td>
                         );
                       }
                       return (
-                        <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm text-ink-soft">
+                        <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm text-ink-soft">
                           {idx === 0 ? "Total" : ""}
                         </td>
                       );
@@ -622,12 +622,13 @@ export function Dashboard({
 }
 
 function Cell({ col, value }: { col: Col; value: unknown }) {
-  const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm";
+  // Tablas de detalle: TODO centrado (encabezados y datos).
+  const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm";
   if (col.num) {
     // Negativos en rojo, positivos en verde; la diferencia ≠ 0 además en negrita.
     const bold = col.key === "diferencia" && Number(value) !== 0 ? "font-bold" : "";
     return (
-      <td className={`${base} text-right tabular-nums ${signClass(value)} ${bold}`}>
+      <td className={`${base} tabular-nums ${signClass(value)} ${bold}`}>
         {money(value)}
       </td>
     );

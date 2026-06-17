@@ -89,10 +89,10 @@ export function TarjetaCreditoPanel({
             <tbody>
               {r.porDia.map((d) => (
                 <tr key={d.fecha} className={Math.abs(d.diff) >= 2 ? "bg-error/5" : ""}>
-                  <td className="border-b border-line px-4 py-2">{fmtDate(d.fecha)}</td>
-                  <td className={`border-b border-line px-4 py-2 text-right tabular-nums ${signClass(d.netoAdq)}`}>{cop(d.netoAdq)}</td>
-                  <td className={`border-b border-line px-4 py-2 text-right tabular-nums ${signClass(d.bancoNC)}`}>{cop(d.bancoNC)}</td>
-                  <td className={`border-b border-line px-4 py-2 text-right tabular-nums ${Math.abs(d.diff) >= 2 ? "text-error font-medium" : "text-ink-soft"}`}>{cop(d.diff)}</td>
+                  <td className="border-b border-line px-4 py-2 text-center">{fmtDate(d.fecha)}</td>
+                  <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.netoAdq)}`}>{cop(d.netoAdq)}</td>
+                  <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.bancoNC)}`}>{cop(d.bancoNC)}</td>
+                  <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${Math.abs(d.diff) >= 2 ? "text-error font-medium" : "text-ink-soft"}`}>{cop(d.diff)}</td>
                 </tr>
               ))}
             </tbody>
@@ -136,13 +136,13 @@ export function TarjetaCreditoPanel({
               {filas.map((d, i) => {
                 const cruzada = !!d.link;
                 const txnId = d.link?.transactionId ?? 0;
-                const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm";
-                const numCls = `${base} text-right tabular-nums`;
+                const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm";
+                const numCls = `${base} tabular-nums`;
                 const statusOk = d.link?.statusFactura === "SUCCESS";
                 return (
                   <tr key={i} className="hover:bg-primary-light/40">
                     <td className={`${base} tabular-nums`}>{d.link?.transactionId ?? "—"}</td>
-                    <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-sm">{d.link ? d.link.facturas.join(", ") : "—"}</td>
+                    <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-center text-sm">{d.link ? d.link.facturas.join(", ") : "—"}</td>
                     <td className={base}>{d.link?.periodo ?? "—"}</td>
                     <td className={`${numCls} ${signClass(d.valorFactura)}`}>{cop(d.valorFactura)}</td>
                     <td className={`${numCls} ${signClass(d.link?.biaCreditos)}`}>{d.link ? cop(d.link.biaCreditos) : "—"}</td>
@@ -158,7 +158,7 @@ export function TarjetaCreditoPanel({
                       ) : "—"}
                     </td>
                     <td className={base}>{cruzada ? (d.link!.esParcial ? "Parcial" : "Total") : "—"}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">
                       {txnId ? (
                         <input
                           value={notes[String(txnId)] ?? ""}

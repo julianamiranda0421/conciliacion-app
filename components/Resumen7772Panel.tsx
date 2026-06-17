@@ -78,11 +78,11 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
           <tbody>
             {movs.map((m, i) => (
               <tr key={i} className="hover:bg-primary-light/40">
-                <td className="whitespace-nowrap border-b border-line px-3 py-2">{fmtDate(m.fecha)}</td>
-                <td className="border-b border-line px-3 py-2">{m.descripcion}</td>
-                <td className="whitespace-nowrap border-b border-line px-3 py-2">{m.recaudo}</td>
-                <td className="whitespace-nowrap border-b border-line px-3 py-2 text-xs text-ink-soft">{m.tran}</td>
-                <td className={`border-b border-line px-3 py-2 text-right tabular-nums ${signClass(m.valor)}`}>{cop(m.valor)}</td>
+                <td className="whitespace-nowrap border-b border-line px-3 py-2 text-center">{fmtDate(m.fecha)}</td>
+                <td className="border-b border-line px-3 py-2 text-center">{m.descripcion}</td>
+                <td className="whitespace-nowrap border-b border-line px-3 py-2 text-center">{m.recaudo}</td>
+                <td className="whitespace-nowrap border-b border-line px-3 py-2 text-center text-xs text-ink-soft">{m.tran}</td>
+                <td className={`border-b border-line px-3 py-2 text-center tabular-nums ${signClass(m.valor)}`}>{cop(m.valor)}</td>
               </tr>
             ))}
           </tbody>

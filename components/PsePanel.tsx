@@ -139,7 +139,7 @@ export function PsePanel({ rows, period }: { rows: PseRow[]; period: string }) {
                     {COLS.map((c) => (
                       <td
                         key={c.key}
-                        className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm ${c.num ? "text-right tabular-nums " + signClass(row[c.key]) : ""}`}
+                        className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm ${c.num ? "tabular-nums " + signClass(row[c.key]) : ""}`}
                       >
                         {c.num ? money(row[c.key]) : fmtDate(row[c.key])}
                       </td>
