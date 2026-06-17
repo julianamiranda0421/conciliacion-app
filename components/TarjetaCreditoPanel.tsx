@@ -82,7 +82,7 @@ export function TarjetaCreditoPanel({
             <thead>
               <tr>
                 {["Fecha abono", "Neto adquirencias", "Nc banco", "Diferencia"].map((h) => (
-                  <th key={h} className="border-b border-line bg-surface px-4 py-2 text-left text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
+                  <th key={h} className={`border-b border-line bg-surface px-4 py-2 text-[11px] uppercase tracking-wide text-ink-soft ${h === "Fecha abono" ? "text-left" : "text-right"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -127,9 +127,12 @@ export function TarjetaCreditoPanel({
                   "TransacciónID", "Factura", "Período factura",
                   "Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso",
                   "Fecha abono", "Status factura", "Pago", "Observaciones",
-                ].map((h) => (
-                  <th key={h} className={`whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-left text-[11px] uppercase tracking-wide text-ink-soft ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
-                ))}
+                ].map((h) => {
+                  const numH = ["Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso"].includes(h);
+                  return (
+                    <th key={h} className={`whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-[11px] uppercase tracking-wide text-ink-soft ${numH ? "text-right" : "text-left"} ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
