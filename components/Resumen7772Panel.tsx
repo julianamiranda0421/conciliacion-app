@@ -2,10 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Resumen7772 } from "@/lib/resumen7772";
-import { fmtDate, signClass } from "@/lib/format";
-
-const cop = (n: number) =>
-  new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
+import { fmtDate, signClass, money as cop } from "@/lib/format";
 
 export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
   const [fRecaudo, setFRecaudo] = useState("");

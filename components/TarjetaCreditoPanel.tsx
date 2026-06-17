@@ -2,10 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { TcResult } from "@/lib/reconcileTC";
-import { fmtDate, signClass } from "@/lib/format";
-
-// Mismo formato de moneda que el Conciliado físico ("$927.240").
-const cop = (n: number) => "$" + Number(n).toLocaleString("es-CO", { maximumFractionDigits: 0 });
+// money (alias cop): mismo formato que el Conciliado físico, negativos con "-$".
+import { fmtDate, signClass, money as cop } from "@/lib/format";
 
 export function TarjetaCreditoPanel({
   result,

@@ -2,12 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { PseRow } from "@/lib/parsePse";
-import { fmtDate, signClass } from "@/lib/format";
-
-const money = (v: unknown) =>
-  v == null || v === ""
-    ? ""
-    : "$" + Number(v).toLocaleString("es-CO", { maximumFractionDigits: 0 });
+import { fmtDate, signClass, money } from "@/lib/format";
 
 type Col = { key: keyof PseRow; label: string; num?: boolean };
 

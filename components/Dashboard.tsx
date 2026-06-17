@@ -6,12 +6,7 @@ import { Trash2, Plus, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { ReconResult } from "@/lib/reconcile";
 import { accountLabel } from "@/lib/banks";
-import { fmtDate, signClass } from "@/lib/format";
-
-const money = (v: unknown) =>
-  v == null || v === ""
-    ? ""
-    : "$" + Number(v).toLocaleString("es-CO", { maximumFractionDigits: 0 });
+import { fmtDate, signClass, money } from "@/lib/format";
 
 type Col = { key: string; label: string; num?: boolean };
 type FilterType = "text" | "select" | "multi";
