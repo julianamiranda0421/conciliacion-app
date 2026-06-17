@@ -18,7 +18,6 @@ export function TarjetaCreditoPanel({
   observaciones: Record<string, string>;
 }) {
   const r = result.resumen;
-  const cuadra = Math.abs(r.diffNetoVsBanco) < 100;
 
   const [fFactura, setFFactura] = useState("");
   const [fEstado, setFEstado] = useState("");
@@ -46,31 +45,45 @@ export function TarjetaCreditoPanel({
     });
   }, [result.detalle, fFactura, fEstado]);
 
-  const cards = [
-    { label: "Facturas por TC (consumo)", value: cop(r.totalConsumo), sub: `${r.nAdq} cargos · ${r.nEnlazadas} cruzados a factura` },
-    { label: "Comisión total", value: cop(r.totalComision), sub: "consumo − neto (lo que descuenta el banco)" },
-    { label: "Neto (ingreso al banco)", value: cop(r.totalNeto), sub: "lo que realmente ingresó por TC" },
-    {
-      label: "NC banco vs neto",
-      value: cop(r.bancoNCTotal),
-      sub: cuadra ? "✓ cuadra con adquirencias" : `dif ${cop(r.diffNetoVsBanco)}`,
-      bad: !cuadra,
-    },
+  // Tarjetas KPI, mismo estilo que recaudo físico. Lógica (ejemplo 10/2/12/6/6/50%):
+  // Ingreso Bancario (Nc, neto) + Adquirencias (comisión) = Ingreso neto (bruto).
+  // Pendiente = Ingreso neto − Valor conciliado; Recaudo% = Valor conciliado / Ingreso neto.
+  const ingresoBancario = r.bancoNCTotal;
+  const adquirencias = r.totalComision;
+  const ingresoNeto = ingresoBancario + adquirencias;
+  const valorConciliado = r.consumoEnlazado;
+  const pendiente = ingresoNeto - valorConciliado;
+  const pctRecaudo = ingresoNeto > 0 ? Math.round((valorConciliado / ingresoNeto) * 100) : 0;
+
+  const valClass = (cls: string) =>
+    cls === "ok" ? "text-success" : cls === "bad" ? "text-error" : cls === "warn" ? "text-warning" : "";
+  const kpis: { cls: string; lbl: string; val: string; sub?: string; bar?: number }[] = [
+    { cls: "ok", lbl: "Ingreso Bancario", val: cop(ingresoBancario), sub: "Nc del banco por TC (sin comisión)" },
+    { cls: "neutral", lbl: "Adquirencias", val: cop(adquirencias), sub: "comisiones del adquirente" },
+    { cls: "ok", lbl: "Ingreso neto", val: cop(ingresoNeto), sub: "Ingreso Bancario + Adquirencias" },
+    { cls: "ok", lbl: "Valor conciliado", val: cop(valorConciliado), sub: `${r.nEnlazadas} de ${r.nAdq} adquirencias cruzadas` },
+    { cls: Math.abs(pendiente) > 1 ? "bad" : "ok", lbl: "Pendiente de conciliar", val: cop(pendiente), sub: "Ingreso neto − Valor conciliado" },
+    { cls: "ok", lbl: "Recaudo", val: `${pctRecaudo}%`, sub: "Valor conciliado / Ingreso neto", bar: pctRecaudo },
   ];
 
   return (
     <div>
       <p className="text-sm text-ink-soft">
-        El cliente paga la factura completa (consumo); el banco descuenta comisiones y abona el neto
-        (las &quot;Nc …&quot; del extracto). La diferencia es la comisión, no un descuadre.
+        El cliente paga la factura completa (consumo); el banco descuenta comisiones (adquirencias) y
+        abona el neto (las &quot;Nc …&quot; del extracto). La diferencia es la comisión, no un descuadre.
       </p>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <div key={c.label} className="rounded-xl border border-line bg-white p-4 shadow-sm">
-            <div className="text-xs font-medium text-ink-soft">{c.label}</div>
-            <div className={`mt-1 text-xl font-bold tabular-nums ${c.bad ? "text-error" : ""}`}>{c.value}</div>
-            <div className="mt-1 text-xs text-ink-soft">{c.sub}</div>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {kpis.map((c) => (
+          <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{c.lbl}</div>
+            <div className={`mt-1 text-2xl font-bold tabular-nums ${valClass(c.cls)}`}>{c.val}</div>
+            {c.sub && <div className="mt-1 text-xs text-ink-soft">{c.sub}</div>}
+            {c.bar != null && (
+              <div className="mt-2 h-1 overflow-hidden rounded bg-line">
+                <div className="h-full bg-success" style={{ width: `${c.bar}%` }} />
+              </div>
+            )}
           </div>
         ))}
       </div>

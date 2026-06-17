@@ -69,6 +69,7 @@ export type TcResumen = {
   totalComision: number;
   totalNeto: number;
   bancoNCTotal: number;
+  consumoEnlazado: number; // valor aplicado (consumo) de las adquirencias que cruzaron a factura
   diffNetoVsBanco: number;
   porDia: { fecha: string; netoAdq: number; bancoNC: number; diff: number }[];
 };
@@ -182,6 +183,8 @@ export function reconcileTC(
   const totalConsumo = adquirencias.reduce((s, a) => s + a.consumo, 0);
   const totalNeto = adquirencias.reduce((s, a) => s + a.neto, 0);
   const totalComision = totalConsumo - totalNeto;
+  // Valor aplicado de las adquirencias que SÍ cruzaron a factura (consumo de las enlazadas).
+  const consumoEnlazado = detalle.filter((d) => d.link).reduce((s, d) => s + d.consumo, 0);
 
   // Cuadre por día: neto de adquirencias (por Fecha Abono) vs Nc del banco (por fecha).
   const netoDia = new Map<string, number>();
@@ -204,6 +207,7 @@ export function reconcileTC(
       totalComision,
       totalNeto,
       bancoNCTotal,
+      consumoEnlazado,
       diffNetoVsBanco: bancoNCTotal - totalNeto,
       porDia,
     },
