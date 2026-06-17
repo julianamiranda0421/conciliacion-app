@@ -68,6 +68,7 @@ const TAB_DEV: TabDef = {
   cols: [
     { key: "fechaDev", label: "Fecha DEV" },
     { key: "documento", label: "Documento" },
+    { key: "descripcion", label: "Descripción" },
     { key: "valor", label: "Valor", num: true },
     { key: "facturasAsociadas", label: "Facturas" },
     { key: "reconsignado", label: "Reconsignado" },

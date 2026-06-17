@@ -93,6 +93,7 @@ export type Movimiento = {
 export type DevAnalisis = {
   fechaDev: string;
   documento: string;
+  descripcion: string; // concepto del banco (ej. "DEV CHEQUE CONSIG CAUSAL 26")
   valor: number;
   facturasAsociadas: string;
   reconsignado: boolean;
@@ -267,6 +268,7 @@ export function reconcile(
     return {
       fechaDev: d.fecha,
       documento: d.documento,
+      descripcion: d.descripcion,
       valor: -montoAbs,
       facturasAsociadas: bills.length ? bills.join(", ") : "(ninguna)",
       reconsignado,
