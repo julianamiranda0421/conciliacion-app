@@ -124,6 +124,19 @@ create table if not exists observations (
 );
 create index if not exists idx_obs_period_acct on observations(period, account_id);
 
+-- Observaciones de cheques devueltos (clave por documento del cheque, que NO tiene
+-- transaction_id). Para anotar "ya se entregó el cheque" u otros comentarios.
+create table if not exists dev_observations (
+  id          bigserial primary key,
+  period      text not null,
+  account_id  text not null,
+  documento   text not null,
+  texto       text,
+  updated_at  timestamptz default now(),
+  unique(period, account_id, documento)
+);
+create index if not exists idx_devobs_period_acct on dev_observations(period, account_id);
+
 -- Adquirencias (recaudo por tarjeta de crédito del 7772). Cada fila es un cargo TC:
 -- consumo = valor factura; comisiones se descuentan; neto = ingreso al banco.
 -- Carga aparte por período; se reemplaza completa (delete por período + insert).

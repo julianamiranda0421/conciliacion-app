@@ -377,6 +377,47 @@ export async function saveObservation(
   if (error) throw new Error(`saveObservation: ${error.message}`);
 }
 
+// ---- Observaciones de cheques devueltos (clave por documento del cheque) ----
+export async function getDevObservations(
+  period: string,
+  accountId: string,
+): Promise<Record<string, string>> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("dev_observations")
+      .select("documento,texto")
+      .eq("period", period)
+      .eq("account_id", accountId);
+    if (error) throw error;
+    const out: Record<string, string> = {};
+    for (const r of data ?? []) {
+      const row = r as { documento: string; texto: string | null };
+      out[String(row.documento)] = row.texto ?? "";
+    }
+    return out;
+  } catch (e) {
+    console.warn("getDevObservations omitido:", e instanceof Error ? e.message : e);
+    return {};
+  }
+}
+
+export async function saveDevObservation(
+  period: string,
+  accountId: string,
+  documento: string,
+  texto: string,
+) {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("dev_observations")
+    .upsert(
+      { period, account_id: accountId, documento, texto, updated_at: new Date().toISOString() } as never,
+      { onConflict: "period,account_id,documento" },
+    );
+  if (error) throw new Error(`saveDevObservation: ${error.message}`);
+}
+
 // ---- Adquirencias (recaudo por tarjeta de crédito del 7772) ----
 export async function saveAdquirencias(period: string, rows: Adquirencia[]) {
   const sb = getSupabase();

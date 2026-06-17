@@ -71,7 +71,7 @@ const TAB_DEV: TabDef = {
     { key: "valor", label: "Valor", num: true },
     { key: "facturasAsociadas", label: "Facturas" },
     { key: "reconsignado", label: "Reconsignado" },
-    { key: "riesgo", label: "Riesgo" },
+    { key: "observacion", label: "Observaciones" },
   ],
 };
 
@@ -158,6 +158,28 @@ export function Dashboard({
       }
       setSavedId(transactionId);
       setTimeout(() => setSavedId((s) => (s === transactionId ? null : s)), 1500);
+    } catch {
+      alert("No se pudo guardar la observación (sin conexión)");
+    }
+  }
+
+  // Guarda la observación de un cheque devuelto (clave = documento del cheque).
+  async function saveDevNote(documento: string, texto: string) {
+    if (!documento) return;
+    const key = "dev:" + documento;
+    try {
+      const res = await fetch("/api/observations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period, accountId, documento, texto }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? "No se pudo guardar la observación");
+        return;
+      }
+      setSavedId(key);
+      setTimeout(() => setSavedId((s) => (s === key ? null : s)), 1500);
     } catch {
       alert("No se pudo guardar la observación (sin conexión)");
     }
@@ -494,6 +516,31 @@ export function Dashboard({
                                   }`}
                                 />
                                 {savedId === id && (
+                                  <span className="text-xs font-medium text-success">✓</span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        }
+                        // Cheques devueltos: observación editable (clave = documento del cheque)
+                        if (tab.id === "dev" && c.key === "observacion") {
+                          const doc = String(row.documento ?? "");
+                          const key = "dev:" + doc;
+                          const val = notes[key] ?? String(row.observacion ?? "");
+                          return (
+                            <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  value={val}
+                                  onChange={(e) => setNotes((p) => ({ ...p, [key]: e.target.value }))}
+                                  onBlur={(e) => saveDevNote(doc, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") e.currentTarget.blur();
+                                  }}
+                                  placeholder="Ej: cheque ya entregado…"
+                                  className="h-8 w-56 rounded-md border border-line px-2 text-xs"
+                                />
+                                {savedId === key && (
                                   <span className="text-xs font-medium text-success">✓</span>
                                 )}
                               </div>

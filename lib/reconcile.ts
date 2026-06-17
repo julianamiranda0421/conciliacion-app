@@ -97,6 +97,7 @@ export type DevAnalisis = {
   facturasAsociadas: string;
   reconsignado: boolean;
   riesgo: string;
+  observacion?: string; // nota manual (persistida por documento del cheque)
 };
 
 // Partida conciliatoria pendiente: centraliza recaudos que no cruzaron, pagos

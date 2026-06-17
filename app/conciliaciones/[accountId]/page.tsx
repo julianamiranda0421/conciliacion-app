@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations, getPse } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations, getPse, getDevObservations } from "@/lib/db";
 import { reconcileTC } from "@/lib/reconcileTC";
 import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
@@ -170,10 +170,15 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
   const txns = filterForAccount(accountId, txnRows);
   const result = reconcileForAccount(accountId, banco, txns, period, flags);
 
-  // Enriquecer el detalle conciliado con datos de la factura (bills_360) y notas.
+  // Enriquecer el detalle conciliado (factura/notas) y los cheques devueltos (notas por documento).
+  const [conciliado, devObs] = await Promise.all([
+    enrichConciliado(result.conciliado, period, accountId),
+    getDevObservations(period, accountId),
+  ]);
   const enriched = {
     ...result,
-    conciliado: await enrichConciliado(result.conciliado, period, accountId),
+    conciliado,
+    dev: result.dev.map((d) => ({ ...d, observacion: devObs[d.documento] ?? "" })),
   };
 
   return <Dashboard result={enriched} accountId={accountId} period={period} />;
