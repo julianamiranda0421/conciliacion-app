@@ -124,7 +124,7 @@ export async function getTcTransactionsByAmounts(
   }
   const sb = getSupabase();
   const cols =
-    "transaction_id,bill_id,amount,bia_credits,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment";
+    "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment";
   const uniq = [...new Set(amounts.map((a) => Math.round(a)))];
   const out: TcTxn[] = [];
   const chunk = 100;
@@ -143,6 +143,7 @@ export async function getTcTransactionsByAmounts(
         billId: String(r.bill_id ?? ""),
         amount: Number(r.amount) || 0,
         biaCredits: Number(r.bia_credits) || 0,
+        total: Number(r.total) || 0,
         paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
         period: (r.period as string) ?? null,
         billStatus: (r.bill_status as string) ?? null,

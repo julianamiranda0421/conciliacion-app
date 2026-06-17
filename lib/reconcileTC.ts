@@ -18,12 +18,22 @@ export type TcTxn = {
   billId: string;
   amount: number; // monto del pago (= Valor Consumo de la adquirencia)
   biaCredits: number; // por transacción
+  total: number; // valor de ESTA factura (bills_360.total)
   paymentDate: string; // YYYY-MM-DD
   period: string | null; // período de la factura
   billStatus: string | null;
   methodType: string; // CREDIT_CARD / BANK_ACCOUNT (PSE) / ...
   methodName: string;
   isPartial: boolean; // pago parcial (la factura tiene varios pagos)
+};
+
+// Detalle por factura del pago (para el drawer): un pago puede cubrir varias facturas.
+// Σ valorFactura = consumo (pago) + bia créditos.
+export type TcFacturaDetalle = {
+  billId: string;
+  periodo: string;
+  valorFactura: number; // bills_360.total de la factura
+  valorAplicado: number; // lo aplicado del pago a esa factura (= valorFactura: se cubre completa)
 };
 
 export type TcLink = {
@@ -34,6 +44,7 @@ export type TcLink = {
   biaCreditos: number;
   metodo: string;
   esParcial: boolean;
+  detalleFacturas: TcFacturaDetalle[];
 };
 
 export type TcDetalle = {
@@ -124,6 +135,14 @@ export function reconcileTC(
       biaCreditos: elegido.biaCredits,
       metodo: elegido.methodType,
       esParcial: elegido.isPartial,
+      // Detalle por factura para el drawer. valorAplicado = valorFactura (cada factura
+      // se cubre completa; Σ valorFactura = consumo + bia créditos).
+      detalleFacturas: elegido.bills.map((b) => ({
+        billId: b.billId,
+        periodo: b.period ?? "—",
+        valorFactura: b.total,
+        valorAplicado: b.total,
+      })),
     });
   }
 

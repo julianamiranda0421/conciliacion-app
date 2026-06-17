@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TcResult } from "@/lib/reconcileTC";
+import { X } from "lucide-react";
+import type { TcResult, TcDetalle } from "@/lib/reconcileTC";
 // money (alias cop): mismo formato que el Conciliado físico, negativos con "-$".
 import { fmtDate, signClass, money as cop } from "@/lib/format";
 
@@ -22,6 +23,8 @@ export function TarjetaCreditoPanel({
   const [fFactura, setFFactura] = useState("");
   const [fEstado, setFEstado] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
+  // Drawer lateral con el detalle factura por factura del pago seleccionado.
+  const [drawer, setDrawer] = useState<TcDetalle | null>(null);
 
   async function saveNote(transactionId: number, texto: string) {
     if (!transactionId) return;
@@ -142,7 +145,19 @@ export function TarjetaCreditoPanel({
                 return (
                   <tr key={i} className="hover:bg-primary-light/40">
                     <td className={`${base} tabular-nums`}>{d.link?.transactionId ?? "—"}</td>
-                    <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-center text-sm">{d.link ? d.link.facturas.join(", ") : "—"}</td>
+                    <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-center text-sm">
+                      {d.link ? (
+                        <button
+                          onClick={() => setDrawer(d)}
+                          className="font-medium text-primary underline-offset-2 hover:underline"
+                          title="Ver detalle por factura"
+                        >
+                          {d.link.facturas.join(", ")}
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className={base}>{d.link?.periodo ?? "—"}</td>
                     <td className={`${numCls} ${signClass(d.valorFactura)}`}>{cop(d.valorFactura)}</td>
                     <td className={`${numCls} ${signClass(d.link?.biaCreditos)}`}>{d.link ? cop(d.link.biaCreditos) : "—"}</td>
@@ -179,6 +194,95 @@ export function TarjetaCreditoPanel({
           </table>
         </div>
       </div>
+
+      {drawer?.link && <FacturasDrawer detalle={drawer} onClose={() => setDrawer(null)} />}
+    </div>
+  );
+}
+
+// Panel lateral (mitad de pantalla, a la derecha) con el detalle factura por factura
+// del pago TC seleccionado: período, valor de la factura y valor aplicado, + total.
+function FacturasDrawer({ detalle, onClose }: { detalle: TcDetalle; onClose: () => void }) {
+  const link = detalle.link!;
+  const filas = link.detalleFacturas;
+  const sumFactura = filas.reduce((s, f) => s + f.valorFactura, 0);
+  const sumAplicado = filas.reduce((s, f) => s + f.valorAplicado, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <aside
+        className="relative flex h-full w-full flex-col bg-white shadow-2xl sm:w-1/2 sm:min-w-[460px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Encabezado */}
+        <div className="flex items-start justify-between border-b border-line px-5 py-4">
+          <div>
+            <h3 className="text-base font-bold">Detalle del pago por factura</h3>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Pago recibido (consumo) <b>{cop(detalle.consumo)}</b> · {filas.length} factura(s)
+              {link.transactionId ? ` · TransacciónID ${link.transactionId}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-ink-soft transition hover:bg-surface hover:text-ink"
+            aria-label="Cerrar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Tabla de facturas */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="overflow-hidden rounded-xl border border-line">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  {["Factura", "Período", "Valor factura", "Valor aplicado"].map((h) => (
+                    <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f, i) => (
+                  <tr key={`${f.billId}-${i}`} className="hover:bg-primary-light/40">
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">{f.billId}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">{f.periodo}</td>
+                    <td className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(f.valorFactura)}`}>{cop(f.valorFactura)}</td>
+                    <td className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(f.valorAplicado)}`}>{cop(f.valorAplicado)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-line bg-surface font-bold">
+                  <td className="border-b border-line px-3.5 py-2.5 text-center text-sm text-ink-soft" colSpan={2}>Total</td>
+                  <td className={`border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(sumFactura)}`}>{cop(sumFactura)}</td>
+                  <td className={`border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(sumAplicado)}`}>{cop(sumAplicado)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Cuadre: Σ facturas = pago recibido + bia créditos */}
+          <div className="mt-4 rounded-lg border border-line bg-surface/50 px-4 py-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-ink-soft">Pago recibido (consumo)</span>
+              <span className="tabular-nums">{cop(detalle.consumo)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-ink-soft">Bia créditos</span>
+              <span className="tabular-nums">{cop(link.biaCreditos)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-line pt-2 font-semibold">
+              <span>Total facturas</span>
+              <span className="tabular-nums">{cop(detalle.consumo + link.biaCreditos)}</span>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
