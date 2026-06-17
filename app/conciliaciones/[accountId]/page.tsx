@@ -133,13 +133,6 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
 
   return (
     <div>
-      <div className="mb-4 rounded-lg border border-line bg-surface/50 px-4 py-3 text-sm text-ink-soft">
-        Archivo de adquirencias (TC) del período {period}. Se carga desde{" "}
-        <Link href="/cargas/nueva" className="font-medium text-primary hover:underline">
-          Cargas → Nueva carga → Adquirencias
-        </Link>
-        .
-      </div>
       {adq.length > 0 ? (
         <TarjetaCreditoPanel
           result={reconcileTC(adq, banco, tcRows)}

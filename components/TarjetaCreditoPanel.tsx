@@ -19,8 +19,8 @@ export function TarjetaCreditoPanel({
 }) {
   const r = result.resumen;
 
+  const [tab, setTab] = useState<"conc" | "pend" | "mov">("conc");
   const [fFactura, setFFactura] = useState("");
-  const [fEstado, setFEstado] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
   // Drawer lateral con el detalle factura por factura del pago seleccionado.
   const [drawer, setDrawer] = useState<TcDetalle | null>(null);
@@ -34,16 +34,17 @@ export function TarjetaCreditoPanel({
     }).catch(() => {});
   }
 
-  const filas = useMemo(() => {
-    return result.detalle.filter((d) => {
-      if (fFactura && !(d.link?.facturas.join(",").includes(fFactura.trim()))) return false;
-      if (fEstado) {
-        const estado = !d.link ? "Sin cruce" : d.link.esParcial ? "Parcial" : "Total";
-        if (estado !== fEstado) return false;
-      }
-      return true;
-    });
-  }, [result.detalle, fFactura, fEstado]);
+  // Recaudo conciliado = adquirencias que cruzaron a factura; pendientes = sin factura.
+  const conciliadas = useMemo(
+    () =>
+      result.detalle.filter(
+        (d) => d.link && (!fFactura || d.link.facturas.join(",").includes(fFactura.trim())),
+      ),
+    [result.detalle, fFactura],
+  );
+  const nConciliadas = useMemo(() => result.detalle.filter((d) => d.link).length, [result.detalle]);
+  const pendientes = useMemo(() => result.detalle.filter((d) => !d.link), [result.detalle]);
+  const movimientos = result.movimientos;
 
   // Tarjetas KPI, mismo estilo que recaudo físico. Lógica (ejemplo 10/2/12/6/6/50%):
   // Ingreso Bancario (Nc, neto) + Adquirencias (comisión) = Ingreso neto (bruto).
@@ -66,14 +67,25 @@ export function TarjetaCreditoPanel({
     { cls: "ok", lbl: "Recaudo", val: `${pctRecaudo}%`, sub: "Valor conciliado / Ingreso neto", bar: pctRecaudo },
   ];
 
+  const TABS = [
+    { id: "conc" as const, label: "Recaudo Conciliado", n: nConciliadas },
+    { id: "pend" as const, label: "Partidas Conciliatorias Pendientes", n: pendientes.length },
+    { id: "mov" as const, label: "Movimientos Bancarios", n: movimientos.length },
+  ];
+
+  const th = "whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft";
+  const td = "whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm";
+  const tdNum = `${td} tabular-nums`;
+
+  const sumPendConsumo = pendientes.reduce((s, d) => s + d.consumo, 0);
+  const sumPendComision = pendientes.reduce((s, d) => s + d.comisionTotal, 0);
+  const sumPendNeto = pendientes.reduce((s, d) => s + d.neto, 0);
+  const sumMov = movimientos.reduce((s, m) => s + m.valor, 0);
+
   return (
     <div>
-      <p className="text-sm text-ink-soft">
-        El cliente paga la factura completa (consumo); el banco descuenta comisiones (adquirencias) y
-        abona el neto (las &quot;Nc …&quot; del extracto). La diferencia es la comisión, no un descuadre.
-      </p>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kpis.map((c) => (
           <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
             <div className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{c.lbl}</div>
@@ -88,125 +100,219 @@ export function TarjetaCreditoPanel({
         ))}
       </div>
 
-      {/* Cuadre por día: neto de adquirencias vs Nc del banco */}
-      <details className="mt-4 rounded-lg border border-line bg-white">
-        <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium">
-          Cuadre por día (neto adquirencias vs Nc banco) — {r.porDia.filter((d) => Math.abs(d.diff) < 2).length}/{r.porDia.length} días cuadran
-        </summary>
-        <div className="overflow-x-auto border-t border-line">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                {["Fecha abono", "Neto adquirencias", "Nc banco", "Diferencia"].map((h) => (
-                  <th key={h} className="border-b border-line bg-surface px-4 py-2 text-center text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {r.porDia.map((d) => (
-                <tr key={d.fecha} className={Math.abs(d.diff) >= 2 ? "bg-error/5" : ""}>
-                  <td className="border-b border-line px-4 py-2 text-center">{fmtDate(d.fecha)}</td>
-                  <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.netoAdq)}`}>{cop(d.netoAdq)}</td>
-                  <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.bancoNC)}`}>{cop(d.bancoNC)}</td>
-                  <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${Math.abs(d.diff) >= 2 ? "text-error font-medium" : "text-ink-soft"}`}>{cop(d.diff)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
-
-      {/* Filtros */}
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <input
-          value={fFactura}
-          onChange={(e) => setFFactura(e.target.value)}
-          placeholder="Buscar factura…"
-          className="h-9 w-44 rounded-md border border-line bg-white px-3 text-sm"
-        />
-        <select value={fEstado} onChange={(e) => setFEstado(e.target.value)} className="h-9 rounded-md border border-line bg-white px-3 text-sm">
-          <option value="">Todo pago</option>
-          <option value="Total">Total</option>
-          <option value="Parcial">Parcial</option>
-          <option value="Sin cruce">Sin cruce</option>
-        </select>
-        <span className="text-sm text-ink-soft">{filas.length} de {result.detalle.length}</span>
+      {/* Pestañas (mismas que las otras cuentas) */}
+      <div className="mt-6 flex flex-wrap gap-2">
+        {TABS.map((t) => {
+          const active = t.id === tab;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`rounded-full border px-4 py-2 text-sm transition ${
+                active
+                  ? "border-primary bg-primary text-white"
+                  : "border-line bg-white text-ink-soft hover:border-primary hover:text-primary"
+              }`}
+            >
+              {t.label} <span className="opacity-60">({t.n})</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Detalle por cargo TC — misma visual que el Conciliado físico + adquirencias */}
-      <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                {[
-                  "TransacciónID", "Factura", "Período factura",
-                  "Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso",
-                  "Fecha abono", "Status factura", "Pago", "Observaciones",
-                ].map((h) => (
-                  <th key={h} className={`whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((d, i) => {
-                const cruzada = !!d.link;
-                const txnId = d.link?.transactionId ?? 0;
-                const base = "whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm";
-                const numCls = `${base} tabular-nums`;
-                const statusOk = d.link?.statusFactura === "SUCCESS";
-                return (
-                  <tr key={i} className="hover:bg-primary-light/40">
-                    <td className={`${base} tabular-nums`}>{d.link?.transactionId ?? "—"}</td>
-                    <td className="min-w-[160px] border-b border-line px-3.5 py-2.5 text-center text-sm">
-                      {d.link ? (
-                        <button
-                          onClick={() => setDrawer(d)}
-                          className="font-medium text-primary underline-offset-2 hover:underline"
-                          title="Ver detalle por factura"
-                        >
-                          {d.link.facturas.join(", ")}
-                        </button>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className={base}>{d.link?.periodo ?? "—"}</td>
-                    <td className={`${numCls} ${signClass(d.valorFactura)}`}>{cop(d.valorFactura)}</td>
-                    <td className={`${numCls} ${signClass(d.link?.biaCreditos)}`}>{d.link ? cop(d.link.biaCreditos) : "—"}</td>
-                    <td className={`${numCls} ${signClass(d.consumo)}`}>{cop(d.consumo)}</td>
-                    <td className={`${numCls} ${signClass(d.comisionTotal)}`}>{cop(d.comisionTotal)}</td>
-                    <td className={`${numCls} ${signClass(d.neto)}`}>{cop(d.neto)}</td>
-                    <td className={base}>{fmtDate(d.fechaAbono)}</td>
-                    <td className={base}>
-                      {cruzada ? (
-                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>
-                          {d.link!.statusFactura}
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className={base}>{cruzada ? (d.link!.esParcial ? "Parcial" : "Total") : "—"}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">
-                      {txnId ? (
-                        <input
-                          value={notes[String(txnId)] ?? ""}
-                          onChange={(e) => setNotes((n) => ({ ...n, [String(txnId)]: e.target.value }))}
-                          onBlur={(e) => saveNote(txnId, e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                          placeholder="—"
-                          className="h-8 w-52 rounded-md border border-line px-2 text-xs"
-                        />
-                      ) : (
-                        <span className="text-xs text-ink-soft">—</span>
-                      )}
-                    </td>
+      {/* === Recaudo Conciliado === */}
+      {tab === "conc" && (
+        <>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <input
+              value={fFactura}
+              onChange={(e) => setFFactura(e.target.value)}
+              placeholder="Buscar factura…"
+              className="h-10 w-44 rounded-md border border-line bg-white px-3 text-sm"
+            />
+            <span className="ml-auto text-sm text-ink-soft">{conciliadas.length} filas</span>
+          </div>
+          {conciliadas.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
+              Sin recaudo conciliado en TC.
+            </div>
+          ) : (
+            <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      {["TransacciónID", "Factura", "Período factura", "Valor factura", "Bia créditos", "Valor consumo", "Adquirencias", "Total Ingreso", "Fecha abono", "Status factura", "Pago", "Observaciones"].map((h) => (
+                        <th key={h} className={`${th} ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conciliadas.map((d, i) => {
+                      const txnId = d.link!.transactionId;
+                      const statusOk = d.link!.statusFactura === "SUCCESS";
+                      return (
+                        <tr key={i} className="hover:bg-primary-light/40">
+                          <td className={tdNum}>{txnId}</td>
+                          <td className="min-w-[160px] border-b border-line px-3 py-2.5 text-center text-sm">
+                            <button
+                              onClick={() => setDrawer(d)}
+                              className="font-medium text-primary underline-offset-2 hover:underline"
+                              title="Ver detalle por factura"
+                            >
+                              {d.link!.facturas.join(", ")}
+                            </button>
+                          </td>
+                          <td className={td}>{d.link!.periodo}</td>
+                          <td className={`${tdNum} ${signClass(d.valorFactura)}`}>{cop(d.valorFactura)}</td>
+                          <td className={`${tdNum} ${signClass(d.link!.biaCreditos)}`}>{cop(d.link!.biaCreditos)}</td>
+                          <td className={`${tdNum} ${signClass(d.consumo)}`}>{cop(d.consumo)}</td>
+                          <td className={`${tdNum} ${signClass(d.comisionTotal)}`}>{cop(d.comisionTotal)}</td>
+                          <td className={`${tdNum} ${signClass(d.neto)}`}>{cop(d.neto)}</td>
+                          <td className={td}>{fmtDate(d.fechaAbono)}</td>
+                          <td className={td}>
+                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>{d.link!.statusFactura}</span>
+                          </td>
+                          <td className={td}>
+                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${d.link!.esParcial ? "bg-warning/20 text-warning" : "bg-success/15 text-success"}`}>{d.link!.esParcial ? "Pago parcial" : "OK"}</span>
+                          </td>
+                          <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
+                            <input
+                              value={notes[String(txnId)] ?? ""}
+                              onChange={(e) => setNotes((n) => ({ ...n, [String(txnId)]: e.target.value }))}
+                              onBlur={(e) => saveNote(txnId, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                              placeholder="—"
+                              className="h-8 w-52 rounded-md border border-line px-2 text-xs"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* === Partidas Conciliatorias Pendientes (adquirencias sin factura) === */}
+      {tab === "pend" && (
+        <>
+          <div className="mt-4 flex items-center">
+            <span className="ml-auto text-sm text-ink-soft">{pendientes.length} filas</span>
+          </div>
+          {pendientes.length === 0 ? (
+            <div className="mt-2 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
+              Sin partidas pendientes ✓
+            </div>
+          ) : (
+            <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      {["Fecha vale", "Fecha abono", "Red", "Tipo tarjeta", "Tarjeta", "Valor consumo", "Adquirencias", "Total Ingreso"].map((h) => (
+                        <th key={h} className={th}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendientes.map((d, i) => (
+                      <tr key={i} className="hover:bg-primary-light/40">
+                        <td className={td}>{fmtDate(d.fechaVale)}</td>
+                        <td className={td}>{fmtDate(d.fechaAbono)}</td>
+                        <td className={td}>{d.red}</td>
+                        <td className={td}>{d.tipoTarjeta}</td>
+                        <td className={td}>{d.tarjeta}</td>
+                        <td className={`${tdNum} ${signClass(d.consumo)}`}>{cop(d.consumo)}</td>
+                        <td className={`${tdNum} ${signClass(d.comisionTotal)}`}>{cop(d.comisionTotal)}</td>
+                        <td className={`${tdNum} ${signClass(d.neto)}`}>{cop(d.neto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-line bg-surface font-bold">
+                      <td className={`${td} text-ink-soft`} colSpan={5}>Total</td>
+                      <td className={`${tdNum} ${signClass(sumPendConsumo)}`}>{cop(sumPendConsumo)}</td>
+                      <td className={`${tdNum} ${signClass(sumPendComision)}`}>{cop(sumPendComision)}</td>
+                      <td className={`${tdNum} ${signClass(sumPendNeto)}`}>{cop(sumPendNeto)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* === Movimientos Bancarios (Nc del TC) === */}
+      {tab === "mov" && (
+        <>
+          <div className="mt-4 flex items-center">
+            <span className="ml-auto text-sm text-ink-soft">{movimientos.length} filas</span>
+          </div>
+          {movimientos.length === 0 ? (
+            <div className="mt-2 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
+              Sin movimientos de TC en el extracto.
+            </div>
+          ) : (
+            <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>{["Fecha", "Descripción", "Valor"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {movimientos.map((m, i) => (
+                      <tr key={i} className="hover:bg-primary-light/40">
+                        <td className={td}>{fmtDate(m.fecha)}</td>
+                        <td className={td}>{m.descripcion}</td>
+                        <td className={`${tdNum} ${signClass(m.valor)}`}>{cop(m.valor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-line bg-surface font-bold">
+                      <td className={`${td} text-ink-soft`} colSpan={2}>Total</td>
+                      <td className={`${tdNum} ${signClass(sumMov)}`}>{cop(sumMov)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Cuadre por día: neto de adquirencias vs Nc del banco */}
+          <details className="mt-4 rounded-lg border border-line bg-white">
+            <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium">
+              Cuadre por día (neto adquirencias vs Nc banco) — {r.porDia.filter((d) => Math.abs(d.diff) < 2).length}/{r.porDia.length} días cuadran
+            </summary>
+            <div className="overflow-x-auto border-t border-line">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr>
+                    {["Fecha abono", "Neto adquirencias", "Nc banco", "Diferencia"].map((h) => (
+                      <th key={h} className="border-b border-line bg-surface px-4 py-2 text-center text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
+                    ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {r.porDia.map((d) => (
+                    <tr key={d.fecha} className={Math.abs(d.diff) >= 2 ? "bg-error/5" : ""}>
+                      <td className="border-b border-line px-4 py-2 text-center">{fmtDate(d.fecha)}</td>
+                      <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.netoAdq)}`}>{cop(d.netoAdq)}</td>
+                      <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.bancoNC)}`}>{cop(d.bancoNC)}</td>
+                      <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${Math.abs(d.diff) >= 2 ? "text-error font-medium" : "text-ink-soft"}`}>{cop(d.diff)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </>
+      )}
 
       {drawer?.link && <FacturasDrawer detalle={drawer} onClose={() => setDrawer(null)} />}
     </div>

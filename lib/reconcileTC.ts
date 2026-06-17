@@ -74,7 +74,8 @@ export type TcResumen = {
   porDia: { fecha: string; netoAdq: number; bancoNC: number; diff: number }[];
 };
 
-export type TcResult = { detalle: TcDetalle[]; resumen: TcResumen };
+export type TcMovimiento = { fecha: string; descripcion: string; valor: number };
+export type TcResult = { detalle: TcDetalle[]; resumen: TcResumen; movimientos: TcMovimiento[] };
 
 const r2 = (n: number) => Math.round(n);
 function dayDist(a: string, b: string): number {
@@ -200,6 +201,8 @@ export function reconcileTC(
 
   return {
     detalle,
+    // Movimientos bancarios del canal TC = las "Nc ..." del extracto.
+    movimientos: nc.map((m) => ({ fecha: m.fecha, descripcion: m.descripcion, valor: m.valor })),
     resumen: {
       nAdq: adquirencias.length,
       nEnlazadas: detalle.filter((d) => d.link).length,
