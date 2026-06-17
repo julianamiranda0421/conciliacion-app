@@ -207,6 +207,7 @@ function FacturasDrawer({ detalle, onClose }: { detalle: TcDetalle; onClose: () 
   const filas = link.detalleFacturas;
   const sumFactura = filas.reduce((s, f) => s + f.valorFactura, 0);
   const sumAplicado = filas.reduce((s, f) => s + f.valorAplicado, 0);
+  const sumDiferencia = sumFactura - sumAplicado;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
@@ -239,46 +240,63 @@ function FacturasDrawer({ detalle, onClose }: { detalle: TcDetalle; onClose: () 
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  {["Factura", "Período", "Valor factura", "Valor aplicado"].map((h) => (
-                    <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft">
+                  {["Factura", "Período", "Valor factura", "Valor aplicado", "Diferencia", "Status factura", "Pago"].map((h) => (
+                    <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft">
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filas.map((f, i) => (
-                  <tr key={`${f.billId}-${i}`} className="hover:bg-primary-light/40">
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">{f.billId}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm">{f.periodo}</td>
-                    <td className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(f.valorFactura)}`}>{cop(f.valorFactura)}</td>
-                    <td className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(f.valorAplicado)}`}>{cop(f.valorAplicado)}</td>
-                  </tr>
-                ))}
+                {filas.map((f, i) => {
+                  const dif = f.valorFactura - f.valorAplicado;
+                  const statusOk = f.statusFactura === "SUCCESS";
+                  return (
+                    <tr key={`${f.billId}-${i}`} className="hover:bg-primary-light/40">
+                      <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">{f.billId}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">{f.periodo}</td>
+                      <td className={`whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm tabular-nums ${signClass(f.valorFactura)}`}>{cop(f.valorFactura)}</td>
+                      <td className={`whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm tabular-nums ${signClass(f.valorAplicado)}`}>{cop(f.valorAplicado)}</td>
+                      <td className={`whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm tabular-nums ${dif !== 0 ? "font-bold text-error" : ""}`}>{cop(dif)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
+                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>{f.statusFactura}</span>
+                      </td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
+                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${f.esParcial ? "bg-warning/20 text-warning" : "bg-success/15 text-success"}`}>{f.esParcial ? "Pago parcial" : "OK"}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-line bg-surface font-bold">
-                  <td className="border-b border-line px-3.5 py-2.5 text-center text-sm text-ink-soft" colSpan={2}>Total</td>
-                  <td className={`border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(sumFactura)}`}>{cop(sumFactura)}</td>
-                  <td className={`border-b border-line px-3.5 py-2.5 text-center text-sm tabular-nums ${signClass(sumAplicado)}`}>{cop(sumAplicado)}</td>
+                  <td className="border-b border-line px-3 py-2.5 text-center text-sm text-ink-soft" colSpan={2}>Total</td>
+                  <td className={`border-b border-line px-3 py-2.5 text-center text-sm tabular-nums ${signClass(sumFactura)}`}>{cop(sumFactura)}</td>
+                  <td className={`border-b border-line px-3 py-2.5 text-center text-sm tabular-nums ${signClass(sumAplicado)}`}>{cop(sumAplicado)}</td>
+                  <td className={`border-b border-line px-3 py-2.5 text-center text-sm tabular-nums ${sumDiferencia !== 0 ? "font-bold text-error" : ""}`}>{cop(sumDiferencia)}</td>
+                  <td className="border-b border-line px-3 py-2.5" colSpan={2}></td>
                 </tr>
               </tfoot>
             </table>
           </div>
 
-          {/* Cuadre: Σ facturas = pago recibido + bia créditos */}
+          {/* Subtotales: Ingreso Bancario + Valor aplicado + Bia créditos → Total */}
           <div className="mt-4 rounded-lg border border-line bg-surface/50 px-4 py-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-ink-soft">Pago recibido (consumo)</span>
+              <span className="text-ink-soft">Ingreso Bancario</span>
               <span className="tabular-nums">{cop(detalle.consumo)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-ink-soft">Valor aplicado</span>
+              <span className="tabular-nums">{cop(sumAplicado)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between">
               <span className="text-ink-soft">Bia créditos</span>
               <span className="tabular-nums">{cop(link.biaCreditos)}</span>
             </div>
             <div className="mt-2 flex items-center justify-between border-t border-line pt-2 font-semibold">
-              <span>Total facturas</span>
-              <span className="tabular-nums">{cop(detalle.consumo + link.biaCreditos)}</span>
+              <span>Total</span>
+              <span className="tabular-nums">{cop(sumFactura)}</span>
             </div>
           </div>
         </div>

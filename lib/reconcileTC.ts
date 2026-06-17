@@ -33,7 +33,9 @@ export type TcFacturaDetalle = {
   billId: string;
   periodo: string;
   valorFactura: number; // bills_360.total de la factura
-  valorAplicado: number; // lo aplicado del pago a esa factura (= valorFactura: se cubre completa)
+  valorAplicado: number; // lo aplicado del pago a esa factura (< total si es pago parcial)
+  statusFactura: string; // bill_status (SUCCESS / ...)
+  esParcial: boolean; // is_partial_payment (la factura tiene varios pagos)
 };
 
 export type TcLink = {
@@ -135,13 +137,20 @@ export function reconcileTC(
       biaCreditos: elegido.biaCredits,
       metodo: elegido.methodType,
       esParcial: elegido.isPartial,
-      // Detalle por factura para el drawer. valorAplicado = valorFactura (cada factura
-      // se cubre completa; Σ valorFactura = consumo + bia créditos).
+      // Detalle por factura para el drawer. En pagos de UNA factura el aplicado es la
+      // contribución del pago (consumo + bia créditos), que puede ser < total si es
+      // pago parcial → Diferencia > 0. En pagos de VARIAS facturas cada una se cubre
+      // completa (Σ valorFactura = consumo + bia créditos), así que aplicado = total.
       detalleFacturas: elegido.bills.map((b) => ({
         billId: b.billId,
         periodo: b.period ?? "—",
         valorFactura: b.total,
-        valorAplicado: b.total,
+        valorAplicado:
+          elegido.bills.length === 1
+            ? Math.min(b.total, elegido.amount + elegido.biaCredits)
+            : b.total,
+        statusFactura: b.billStatus ?? "SUCCESS",
+        esParcial: b.isPartial,
       })),
     });
   }
