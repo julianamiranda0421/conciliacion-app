@@ -15,12 +15,13 @@ import {
   listBills360Periods,
   getCajaConciliada,
   listBankPeriods,
-  getCrossingsDetail,
+  getFacturasDetalle,
+  type FacturaDetalleRow,
 } from "@/lib/db";
 import { CarteraControls } from "@/components/CarteraControls";
 import { BankPeriodSelect } from "@/components/BankPeriodSelect";
 import { IngresoVsAplicado } from "@/components/IngresoVsAplicado";
-import { CrossingsTable } from "@/components/CrossingsTable";
+import { FacturasDetalle } from "@/components/FacturasDetalle";
 import { accountLabel } from "@/lib/banks";
 
 export const dynamic = "force-dynamic";
@@ -48,10 +49,10 @@ export default async function CarteraPage({
   const isTodos = current === "todos" || periods.length === 0;
   const bankPeriod = bankParam ?? bankPeriods[0] ?? "";
 
-  const [data, caja, crossings] = await Promise.all([
+  const [data, caja, facturas] = await Promise.all([
     getCartera(isTodos ? undefined : current),
     getCajaConciliada(bankPeriod || undefined),
-    getCrossingsDetail(bankPeriod || undefined),
+    isTodos ? Promise.resolve<FacturaDetalleRow[]>([]) : getFacturasDetalle(current),
   ]);
 
   return (
@@ -172,11 +173,18 @@ export default async function CarteraPage({
               </div>
             )}
 
-            {/* Detalle transacción×factura: contra qué cuenta cruzó cada pago. */}
-            {crossings.length > 0 && <CrossingsTable rows={crossings} />}
           </>
         )}
       </div>
+
+      {/* Detalle de TODAS las facturas del período (pagadas o no) + contra qué cuenta cruzaron. */}
+      {isTodos ? (
+        <div className="mt-6 rounded-xl border border-dashed border-line bg-white px-6 py-8 text-center text-sm text-ink-soft">
+          Selecciona un período arriba para ver el detalle de facturas.
+        </div>
+      ) : (
+        <FacturasDetalle rows={facturas} />
+      )}
     </div>
   );
 }

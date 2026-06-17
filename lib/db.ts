@@ -1,6 +1,7 @@
 // Capa de acceso a datos sobre Supabase. Solo servidor.
 
 import { getSupabase } from "./supabase";
+import { accountLabel } from "./banks";
 import type { TxnRow } from "./parseTransactions";
 import type { BankMovement } from "./parseBank";
 import type { Conciliado } from "./reconcile";
@@ -952,4 +953,81 @@ export async function getCrossingsDetail(bankPeriod?: string): Promise<CrossingD
     if (rows.length < size) break;
   }
   return out;
+}
+
+// Detalle de facturas de un período (bills_360): TODAS, pagadas o no, con su
+// status, fecha de pago, bia créditos, valor aplicado y la cuenta contra la que
+// cruzó el pago (si se concilió). Una fila por factura (agrega sus pagos SUCCESS,
+// deduplicando por transaction_id por el grano factura×pago).
+export type FacturaDetalleRow = {
+  billId: string;
+  period: string | null;
+  status: string | null;
+  fechaPago: string | null;
+  valorFactura: number;
+  valorAplicado: number;
+  biaCreditos: number;
+  cuentaCruce: string; // etiqueta(s) de cuenta (ej. "Bancolombia 1144"); "" si no cruzó
+};
+
+export async function getFacturasDetalle(period?: string): Promise<FacturaDetalleRow[]> {
+  // Mapa transaction_id -> cuenta con la que cruzó (de crossings).
+  const crossings = await getCrossingsDetail();
+  const crossMap = new Map<number, string>();
+  for (const c of crossings) if (c.transactionId && !crossMap.has(c.transactionId)) crossMap.set(c.transactionId, c.accountId);
+
+  const sb = getSupabase();
+  const cols = "bill_id,period,bill_status,total,transaction_id,transaction_state,payment_date,bia_credits,amount";
+  type Raw = {
+    bill_id: number; period: string | null; bill_status: string | null; total: number | null;
+    transaction_id: number | null; transaction_state: string | null; payment_date: string | null;
+    bia_credits: number | null; amount: number | null;
+  };
+  const raws: Raw[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb.from("bills_360").select(cols).range(from, from + size - 1);
+    if (period) q = q.eq("period", period);
+    const { data, error } = await q;
+    if (error) throw new Error(`getFacturasDetalle: ${error.message}`);
+    raws.push(...((data ?? []) as Raw[]));
+    if (!data || data.length < size) break;
+  }
+
+  type Agg = {
+    billId: string; period: string | null; status: string | null; total: number;
+    aplicado: number; bia: number; fechaPago: string | null; cuentas: Set<string>; txns: Set<number>;
+  };
+  const map = new Map<string, Agg>();
+  for (const r of raws) {
+    const id = String(r.bill_id);
+    let b = map.get(id);
+    if (!b) {
+      b = { billId: id, period: r.period, status: r.bill_status, total: Number(r.total) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set() };
+      map.set(id, b);
+    }
+    const success = r.transaction_state === "SUCCESS" && r.transaction_id != null;
+    if (success && !b.txns.has(r.transaction_id as number)) {
+      b.txns.add(r.transaction_id as number);
+      b.aplicado += Number(r.amount) || 0;
+      b.bia += Number(r.bia_credits) || 0;
+      const pd = r.payment_date ? String(r.payment_date).slice(0, 10) : null;
+      if (pd && (!b.fechaPago || pd > b.fechaPago)) b.fechaPago = pd;
+      const acc = crossMap.get(r.transaction_id as number);
+      if (acc) b.cuentas.add(acc);
+    }
+  }
+
+  return [...map.values()]
+    .map((b) => ({
+      billId: b.billId,
+      period: b.period,
+      status: b.status,
+      fechaPago: b.fechaPago,
+      valorFactura: b.total,
+      valorAplicado: b.aplicado,
+      biaCreditos: b.bia,
+      cuentaCruce: [...b.cuentas].map(accountLabel).join(", "),
+    }))
+    .sort((a, b) => Number(b.billId) - Number(a.billId));
 }
