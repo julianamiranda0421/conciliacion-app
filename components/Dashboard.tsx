@@ -16,6 +16,7 @@ type TabDef = {
   label: string;
   cols: Col[];
   filters?: FilterDef[];
+  total?: boolean; // muestra fila de Total al pie (suma las columnas numéricas)
 };
 
 const TAB_CONCILIADO: TabDef = {
@@ -49,6 +50,7 @@ const TAB_CONCILIADO: TabDef = {
 const TAB_PENDIENTES: TabDef = {
   id: "pendientes",
   label: "Partidas Conciliatorias Pendientes",
+  total: true,
   filters: [{ key: "status", label: "Status", type: "select" }],
   cols: [
     { key: "fecha", label: "Fecha" },
@@ -62,6 +64,7 @@ const TAB_PENDIENTES: TabDef = {
 const TAB_DEV: TabDef = {
   id: "dev",
   label: "Cheques devueltos",
+  total: true,
   cols: [
     { key: "fechaDev", label: "Fecha DEV" },
     { key: "documento", label: "Documento" },
@@ -537,6 +540,31 @@ export function Dashboard({
                   );
                 })}
               </tbody>
+              {tab.total && (
+                <tfoot>
+                  <tr className="border-t-2 border-line bg-surface font-bold">
+                    {tab.cols.map((c, idx) => {
+                      if (c.num) {
+                        // Total de la columna sobre las filas mostradas (respeta filtros).
+                        const sum = rows.reduce((s, r) => s + (Number(r[c.key]) || 0), 0);
+                        return (
+                          <td
+                            key={c.key}
+                            className={`whitespace-nowrap border-b border-line px-3.5 py-2.5 text-right text-sm tabular-nums ${signClass(sum)}`}
+                          >
+                            {money(sum)}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm text-ink-soft">
+                          {idx === 0 ? "Total" : ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
