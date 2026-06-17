@@ -15,10 +15,12 @@ import {
   listBills360Periods,
   getCajaConciliada,
   listBankPeriods,
+  getCrossingsDetail,
 } from "@/lib/db";
 import { CarteraControls } from "@/components/CarteraControls";
 import { BankPeriodSelect } from "@/components/BankPeriodSelect";
 import { IngresoVsAplicado } from "@/components/IngresoVsAplicado";
+import { CrossingsTable } from "@/components/CrossingsTable";
 import { accountLabel } from "@/lib/banks";
 
 export const dynamic = "force-dynamic";
@@ -46,9 +48,10 @@ export default async function CarteraPage({
   const isTodos = current === "todos" || periods.length === 0;
   const bankPeriod = bankParam ?? bankPeriods[0] ?? "";
 
-  const [data, caja] = await Promise.all([
+  const [data, caja, crossings] = await Promise.all([
     getCartera(isTodos ? undefined : current),
     getCajaConciliada(bankPeriod || undefined),
+    getCrossingsDetail(bankPeriod || undefined),
   ]);
 
   return (
@@ -168,6 +171,9 @@ export default async function CarteraPage({
                 </div>
               </div>
             )}
+
+            {/* Detalle transacción×factura: contra qué cuenta cruzó cada pago. */}
+            {crossings.length > 0 && <CrossingsTable rows={crossings} />}
           </>
         )}
       </div>

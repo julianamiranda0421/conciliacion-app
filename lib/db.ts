@@ -910,3 +910,46 @@ export async function getCajaConciliada(bankPeriod?: string): Promise<CajaConcil
     porCuenta,
   };
 }
+
+// Detalle transacción×factura de los cruces: qué factura cruzó contra qué cuenta
+// bancaria (ej. "Bancolombia 1144"), con sus valores. Por mes de extracto bancario.
+export type CrossingDetailRow = {
+  accountId: string;
+  transactionId: number;
+  billId: string; // factura (lado plataforma)
+  valorBanco: number;
+  valorAplicado: number;
+  diferencia: number;
+  fechaBanco: string | null;
+  tipo: string;
+};
+
+export async function getCrossingsDetail(bankPeriod?: string): Promise<CrossingDetailRow[]> {
+  const sb = getSupabase();
+  const out: CrossingDetailRow[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb
+      .from("crossings")
+      .select("account_id,transaction_id,bill_id_txn,valor_banco,valor_aplicado,diferencia,fecha_banco,tipo")
+      .range(from, from + size - 1);
+    if (bankPeriod) q = q.eq("period", bankPeriod);
+    const { data, error } = await q;
+    if (error) throw new Error(`getCrossingsDetail: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const r of rows) {
+      out.push({
+        accountId: String(r.account_id ?? ""),
+        transactionId: Number(r.transaction_id) || 0,
+        billId: String(r.bill_id_txn ?? ""),
+        valorBanco: Number(r.valor_banco) || 0,
+        valorAplicado: Number(r.valor_aplicado) || 0,
+        diferencia: Number(r.diferencia) || 0,
+        fechaBanco: r.fecha_banco ? String(r.fecha_banco) : null,
+        tipo: String(r.tipo ?? ""),
+      });
+    }
+    if (rows.length < size) break;
+  }
+  return out;
+}
