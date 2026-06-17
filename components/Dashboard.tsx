@@ -265,7 +265,7 @@ export function Dashboard({
     { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por Conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "Ingreso Bancario − Recaudo" },
     isAch
       ? { cls: k.diferenciaValor > 1 ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` }
-      : { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(k.totalDevValor), sub: `${k.nDev} cheque(s)` },
+      : { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(-k.totalDevValor), sub: `${k.nDev} cheque(s)` },
     // % de lo que ingresó al banco que se cruzó como recaudo.
     { cls: "ok", lbl: "% Recaudo / Ingreso bancario", val: `${pctConc}%`, sub: "recaudo conciliado vs ingreso", bar: pctConc },
   ];
