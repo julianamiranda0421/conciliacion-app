@@ -280,11 +280,11 @@ function FacturasDrawer({ detalle, onClose }: { detalle: TcDetalle; onClose: () 
             </table>
           </div>
 
-          {/* Subtotales: Ingreso Bancario + Valor aplicado + Bia créditos → Total */}
+          {/* Subtotales: Valor aplicado (efectivo) + Bia créditos = Valor facturas (Total). */}
           <div className="mt-4 rounded-lg border border-line bg-surface/50 px-4 py-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-ink-soft">Ingreso Bancario</span>
-              <span className="tabular-nums">{cop(detalle.consumo)}</span>
+              <span className="text-ink-soft">Valor facturas</span>
+              <span className="tabular-nums">{cop(sumFactura)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between">
               <span className="text-ink-soft">Valor aplicado</span>
@@ -296,7 +296,7 @@ function FacturasDrawer({ detalle, onClose }: { detalle: TcDetalle; onClose: () 
             </div>
             <div className="mt-2 flex items-center justify-between border-t border-line pt-2 font-semibold">
               <span>Total</span>
-              <span className="tabular-nums">{cop(sumFactura)}</span>
+              <span className="tabular-nums">{cop(sumAplicado + link.biaCreditos)}</span>
             </div>
           </div>
         </div>

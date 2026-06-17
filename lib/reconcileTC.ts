@@ -137,21 +137,26 @@ export function reconcileTC(
       biaCreditos: elegido.biaCredits,
       metodo: elegido.methodType,
       esParcial: elegido.isPartial,
-      // Detalle por factura para el drawer. En pagos de UNA factura el aplicado es la
-      // contribución del pago (consumo + bia créditos), que puede ser < total si es
-      // pago parcial → Diferencia > 0. En pagos de VARIAS facturas cada una se cubre
-      // completa (Σ valorFactura = consumo + bia créditos), así que aplicado = total.
-      detalleFacturas: elegido.bills.map((b) => ({
-        billId: b.billId,
-        periodo: b.period ?? "—",
-        valorFactura: b.total,
-        valorAplicado:
-          elegido.bills.length === 1
-            ? Math.min(b.total, elegido.amount + elegido.biaCredits)
-            : b.total,
-        statusFactura: b.billStatus ?? "SUCCESS",
-        esParcial: b.isPartial,
-      })),
+      // Detalle por factura para el drawer. valorAplicado = EFECTIVO del pago (consumo)
+      // repartido proporcional al valor de cada factura; NO incluye bia créditos. Así
+      // valorAplicado + bia = valor factura (Σ valorAplicado = consumo; la diferencia con
+      // el valor factura la cubren los bia créditos o, si es parcial, queda como faltante).
+      detalleFacturas: (() => {
+        const sumTot = elegido.bills.reduce((s, b) => s + b.total, 0) || 1;
+        let restoCash = elegido.amount;
+        return elegido.bills.map((b, i, arr) => {
+          const aplicado = i === arr.length - 1 ? restoCash : Math.round((elegido.amount * b.total) / sumTot);
+          restoCash -= aplicado;
+          return {
+            billId: b.billId,
+            periodo: b.period ?? "—",
+            valorFactura: b.total,
+            valorAplicado: aplicado,
+            statusFactura: b.billStatus ?? "SUCCESS",
+            esParcial: b.isPartial,
+          };
+        });
+      })(),
     });
   }
 
