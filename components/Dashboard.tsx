@@ -132,8 +132,17 @@ export function Dashboard({
 }) {
   const router = useRouter();
   const isAch = Array.isArray(result.otrosIngresos);
+  // En cuentas ACH (Davivienda 5571, 1800, 1144) el extracto NO trae el número de
+  // factura, así que se oculta la columna "Factura" del banco (billIdBanco en el
+  // conciliado y billId en partidas de recaudo). La factura de la plataforma
+  // ("Factura aplicada") sí se conserva.
   const TABS = isAch
-    ? [TAB_CONCILIADO, TAB_RECAUDO, TAB_OTROS, TAB_MOV]
+    ? [
+        { ...TAB_CONCILIADO, cols: TAB_CONCILIADO.cols.filter((c) => c.key !== "billIdBanco") },
+        { ...TAB_RECAUDO, cols: TAB_RECAUDO.cols.filter((c) => c.key !== "billId") },
+        TAB_OTROS,
+        TAB_MOV,
+      ]
     : [TAB_CONCILIADO, TAB_PENDIENTES, TAB_DEV, TAB_MOV];
 
   const [current, setCurrent] = useState<keyof ReconResult>("conciliado");
@@ -293,11 +302,17 @@ export function Dashboard({
   const k = result.resumen;
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
+  // Total de "Otros ingresos" (ingresos del banco que NO son recaudo) — solo cuentas ACH.
+  const totalOtros = (result.otrosIngresos ?? []).reduce((s, p) => s + p.valor, 0);
+  const nOtros = (result.otrosIngresos ?? []).length;
+
   type Kpi = { cls: string; lbl: string; val: string; sub?: string; bar?: number };
   const kpis: Kpi[] = [
     // Total ingreso bancario: sin subtítulo (el título resaltado va en negrita como los demás).
     { cls: "ok", lbl: "Total Ingreso Bancario", val: money(k.totalIngresoBanco) },
     { cls: "ok", lbl: "Recaudo Conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso bancario` },
+    // Otros ingresos (no recaudo) — solo aplica a cuentas ACH (tienen esa categoría).
+    ...(isAch ? [{ cls: "ok", lbl: "Otros ingresos", val: money(totalOtros), sub: `${nOtros} ingreso(s) que no son recaudo` }] : []),
     { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por Conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "Ingreso Bancario − Recaudo" },
     isAch
       ? { cls: k.diferenciaValor > 1 ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` }
@@ -305,6 +320,8 @@ export function Dashboard({
     // % de lo que ingresó al banco que se cruzó como recaudo.
     { cls: "ok", lbl: "% Recaudo / Ingreso bancario", val: `${pctConc}%`, sub: "recaudo conciliado vs ingreso", bar: pctConc },
   ];
+  // 5 tarjetas (cheque) o 6 (ACH, con "Otros ingresos") → ajustar columnas del grid.
+  const gridCols = kpis.length >= 6 ? "xl:grid-cols-6" : "xl:grid-cols-5";
 
   const valClass = (cls: string) =>
     cls === "ok" ? "text-success" : cls === "warn" ? "text-warning" : "text-error";
@@ -312,7 +329,7 @@ export function Dashboard({
   return (
     <div>
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${gridCols}`}>
         {kpis.map((c) => (
           <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
             <div className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{c.lbl}</div>
