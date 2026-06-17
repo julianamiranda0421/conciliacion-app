@@ -136,15 +136,28 @@ export function Dashboard({
   const [sortAsc, setSortAsc] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   // Guarda la observación de una partida conciliada (por transaction_id).
+  // Muestra un ✓ al guardar y avisa si falla (antes el error se tragaba en silencio).
   async function saveNote(transactionId: string, texto: string) {
     if (!transactionId) return;
-    await fetch("/api/observations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ period, accountId, transactionId: Number(transactionId), texto }),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/observations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period, accountId, transactionId: Number(transactionId), texto }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? "No se pudo guardar la observación");
+        return;
+      }
+      setSavedId(transactionId);
+      setTimeout(() => setSavedId((s) => (s === transactionId ? null : s)), 1500);
+    } catch {
+      alert("No se pudo guardar la observación (sin conexión)");
+    }
   }
 
   const tab = TABS.find((t) => t.id === current) ?? TABS[0];
@@ -464,15 +477,23 @@ export function Dashboard({
                           const hasDiff = Number(row.diferencia) !== 0;
                           return (
                             <td key={c.key} className="whitespace-nowrap border-b border-line px-3.5 py-2.5 text-sm">
-                              <input
-                                value={val}
-                                onChange={(e) => setNotes((p) => ({ ...p, [id]: e.target.value }))}
-                                onBlur={(e) => saveNote(id, e.target.value)}
-                                placeholder={hasDiff ? "Anota la diferencia…" : "—"}
-                                className={`h-8 w-52 rounded-md border px-2 text-xs ${
-                                  hasDiff ? "border-error/50 bg-error/5" : "border-line"
-                                }`}
-                              />
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  value={val}
+                                  onChange={(e) => setNotes((p) => ({ ...p, [id]: e.target.value }))}
+                                  onBlur={(e) => saveNote(id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") e.currentTarget.blur();
+                                  }}
+                                  placeholder={hasDiff ? "Anota la diferencia…" : "—"}
+                                  className={`h-8 w-52 rounded-md border px-2 text-xs ${
+                                    hasDiff ? "border-error/50 bg-error/5" : "border-line"
+                                  }`}
+                                />
+                                {savedId === id && (
+                                  <span className="text-xs font-medium text-success">✓</span>
+                                )}
+                              </div>
                             </td>
                           );
                         }

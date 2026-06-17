@@ -164,6 +164,7 @@ export function TarjetaCreditoPanel({
                           value={notes[String(txnId)] ?? ""}
                           onChange={(e) => setNotes((n) => ({ ...n, [String(txnId)]: e.target.value }))}
                           onBlur={(e) => saveNote(txnId, e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                           placeholder="—"
                           className="h-8 w-52 rounded-md border border-line px-2 text-xs"
                         />
