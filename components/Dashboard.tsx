@@ -320,16 +320,14 @@ export function Dashboard({
     // % de lo que ingresó al banco que se cruzó como recaudo.
     { cls: "ok", lbl: "% Recaudo / Ingreso bancario", val: `${pctConc}%`, sub: "recaudo conciliado vs ingreso", bar: pctConc },
   ];
-  // 5 tarjetas (cheque) o 6 (ACH, con "Otros ingresos") → ajustar columnas del grid.
-  const gridCols = kpis.length >= 6 ? "xl:grid-cols-6" : "xl:grid-cols-5";
 
   const valClass = (cls: string) =>
     cls === "ok" ? "text-success" : cls === "warn" ? "text-warning" : "text-error";
 
   return (
     <div>
-      {/* KPIs */}
-      <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${gridCols}`}>
+      {/* KPIs — máx. 3 por fila para que los montos grandes (miles de millones) no se corten. */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kpis.map((c) => (
           <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
             <div className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{c.lbl}</div>
