@@ -126,7 +126,7 @@ export function PsePanel({ rows, period }: { rows: PseRow[]; period: string }) {
                           setSortAsc(true);
                         }
                       }}
-                      className={`cursor-pointer whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-[11px] uppercase tracking-wide text-ink-soft ${c.num ? "text-right" : "text-left"}`}
+                      className="cursor-pointer whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft"
                     >
                       {c.label}
                     </th>

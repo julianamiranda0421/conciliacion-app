@@ -71,7 +71,7 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
           <thead>
             <tr>
               {["Fecha", "Concepto", "Recaudo", "Tran", "Valor"].map((h) => (
-                <th key={h} className={`whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-[11px] uppercase tracking-wide text-ink-soft ${h === "Valor" ? "text-right" : "text-left"}`}>{h}</th>
+                <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-center text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
               ))}
             </tr>
           </thead>
