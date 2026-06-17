@@ -255,16 +255,18 @@ export function reconcile(
         : "En banco, sin registro en transactions",
     }));
 
-  // Análisis de cheques devueltos
+  // Análisis de cheques devueltos. `montoAbs` es la magnitud (positiva) para
+  // cruzar contra recaudos/transacciones; el `valor` que se muestra va NEGATIVO
+  // porque una devolución es una salida (resta del banco) → sale en rojo.
   const devAnalisis: DevAnalisis[] = dev.map((d) => {
-    const val = -d.valor;
-    const recaudosVal = recaudos.filter((r) => r.valor === val);
+    const montoAbs = -d.valor;
+    const recaudosVal = recaudos.filter((r) => r.valor === montoAbs);
     const reconsignado = recaudosVal.some((r) => Date.parse(r.fecha) > Date.parse(d.fecha));
-    const bills = txns.filter((t) => t.amount === val).map((t) => t.billId);
+    const bills = txns.filter((t) => t.amount === montoAbs).map((t) => t.billId);
     return {
       fechaDev: d.fecha,
       documento: d.documento,
-      valor: val,
+      valor: -montoAbs,
       facturasAsociadas: bills.length ? bills.join(", ") : "(ninguna)",
       reconsignado,
       riesgo: reconsignado
@@ -311,7 +313,7 @@ export function reconcile(
       concepto: "DEV CHEQUE (devolución)",
       punto: "",
       billId: "",
-      valor: -d.valor, // signo del banco: negativo
+      valor: d.valor, // ya es negativo (la devolución resta del banco)
       status: "Cheque devuelto",
     })),
   ];
@@ -325,7 +327,8 @@ export function reconcile(
   const positivesGross = cfg.multiChannel
     ? recaudos.reduce((s, r) => s + r.valor, 0)
     : banco.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
-  const totalDevValor = devAnalisis.reduce((s, d) => s + d.valor, 0);
+  // Magnitud (positiva) de los cheques devueltos; el detalle los muestra negativos.
+  const totalDevValor = devAnalisis.reduce((s, d) => s + Math.abs(d.valor), 0);
   // Los cheques devueltos reversan el ingreso (efecto cero), así que se restan
   // del total para reflejar el ingreso neto real que quedó en la cuenta.
   const totalIngresoBanco = positivesGross - totalDevValor;
