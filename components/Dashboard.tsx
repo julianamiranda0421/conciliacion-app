@@ -80,6 +80,7 @@ const TAB_DEV: TabDef = {
 const TAB_RECAUDO: TabDef = {
   id: "recaudoPendiente",
   label: "Partidas conciliatorias recaudo",
+  total: true,
   cols: [
     { key: "fecha", label: "Fecha" },
     { key: "concepto", label: "Concepto" },
@@ -92,6 +93,7 @@ const TAB_RECAUDO: TabDef = {
 const TAB_OTROS: TabDef = {
   id: "otrosIngresos",
   label: "Otros ingresos",
+  total: true,
   filters: [{ key: "concepto", label: "Concepto", type: "select" }],
   cols: [
     { key: "fecha", label: "Fecha" },
