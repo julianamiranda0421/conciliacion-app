@@ -966,6 +966,7 @@ export type FacturaDetalleRow = {
   billId: string;
   period: string | null;
   estado: FacturaEstado;
+  status: string | null; // bill_status crudo (SUCCESS/CREATED/ERROR…)
   fechaPago: string | null;
   valorFactura: number;
   valorPendiente: number; // total_with_deposit: lo que falta por pagar si tiene abonos
@@ -1000,7 +1001,7 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   }
 
   type Agg = {
-    billId: string; period: string | null; total: number; totalWithDeposit: number;
+    billId: string; period: string | null; status: string | null; total: number; totalWithDeposit: number;
     aplicado: number; bia: number; fechaPago: string | null; cuentas: Set<string>; txns: Set<number>;
     parcial: boolean;
   };
@@ -1009,7 +1010,7 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
     const id = String(r.bill_id);
     let b = map.get(id);
     if (!b) {
-      b = { billId: id, period: r.period, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set(), parcial: false };
+      b = { billId: id, period: r.period, status: r.bill_status, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set(), parcial: false };
       map.set(id, b);
     }
     if (r.is_partial_payment === true) b.parcial = true;
@@ -1036,6 +1037,7 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
         billId: b.billId,
         period: b.period,
         estado,
+        status: b.status,
         fechaPago: b.fechaPago,
         valorFactura: b.total,
         valorPendiente: b.totalWithDeposit,

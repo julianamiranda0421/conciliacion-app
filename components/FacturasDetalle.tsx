@@ -67,7 +67,7 @@ export function FacturasDetalle({ rows }: { rows: FacturaDetalleRow[] }) {
             <table className="w-full border-collapse">
               <thead className="sticky top-0">
                 <tr>
-                  {["Factura", "Período", "Estado", "Fecha de pago", "Valor factura", "Valor pendiente", "Valor aplicado", "Bia créditos", "Cuenta cruce"].map((h) => (
+                  {["Factura", "Período", "Estado", "Fecha de pago", "Valor factura", "Valor pendiente", "Valor aplicado", "Bia créditos", "Status factura", "Cuenta cruce"].map((h) => (
                     <th key={h} className={th}>{h}</th>
                   ))}
                 </tr>
@@ -85,6 +85,7 @@ export function FacturasDetalle({ rows }: { rows: FacturaDetalleRow[] }) {
                     <td className={`${tdNum} ${signClass(r.valorPendiente)}`}>{r.valorPendiente ? money(r.valorPendiente) : "—"}</td>
                     <td className={`${tdNum} ${signClass(r.valorAplicado)}`}>{r.valorAplicado ? money(r.valorAplicado) : "—"}</td>
                     <td className={`${tdNum} ${signClass(r.biaCreditos)}`}>{r.biaCreditos ? money(r.biaCreditos) : "—"}</td>
+                    <td className={td}>{r.status ?? "—"}</td>
                     <td className={td}>{r.cuentaCruce || "—"}</td>
                   </tr>
                 ))}
@@ -96,6 +97,7 @@ export function FacturasDetalle({ rows }: { rows: FacturaDetalleRow[] }) {
                   <td className={`${tdNum} ${signClass(sumPendiente)}`}>{money(sumPendiente)}</td>
                   <td className={`${tdNum} ${signClass(sumAplicado)}`}>{money(sumAplicado)}</td>
                   <td className={`${tdNum} ${signClass(sumBia)}`}>{money(sumBia)}</td>
+                  <td className={td}></td>
                   <td className={td}></td>
                 </tr>
               </tfoot>
