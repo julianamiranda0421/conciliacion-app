@@ -67,7 +67,7 @@ export function FacturasDetalle({ rows }: { rows: FacturaDetalleRow[] }) {
             <table className="w-full border-collapse">
               <thead className="sticky top-0">
                 <tr>
-                  {["Factura", "Período", "Status factura", "Fecha de pago", "Valor factura", "Valor pendiente", "Valor aplicado", "Bia créditos", "Estado", "Cuenta cruce"].map((h) => (
+                  {["Factura", "Período", "Status factura", "Fecha de pago", "Total Factura", "Total With Deposit", "Valor aplicado", "Bia créditos", "Estado", "Cuenta cruce"].map((h) => (
                     <th key={h} className={th}>{h}</th>
                   ))}
                 </tr>
