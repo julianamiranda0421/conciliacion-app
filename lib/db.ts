@@ -1038,19 +1038,18 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
 
   return [...map.values()]
     .map((b) => {
-      // Estado por MONTOS, no por el flag is_partial_payment: una factura pagada en
-      // varias cuotas que suman el total está "Pagado". total = aplicado + bia_credits.
-      // Excepción: factura con total negativo (nota crédito/ajuste a favor) en SUCCESS
-      // no tiene nada por pagar → Pagado aunque no tenga transacción de pago.
-      const pagado = b.aplicado + b.bia;
+      // El estado lo manda bill_status (verdad del sistema de facturación):
+      //  - SUCCESS ⇒ la factura quedó SALDADA (cubre diferencias de centavos/redondeo,
+      //    cuotas que suman el total y notas crédito de total negativo).
+      //  - si NO es SUCCESS: hay Pago Parcial si tiene alguna transacción exitosa; si no,
+      //    Pendiente de Pago.
+      // (No se usa is_partial_payment: ese flag viene también de intentos en ERROR.)
       const estado: FacturaEstado =
-        b.status === "SUCCESS" && b.total < 0
+        b.status === "SUCCESS"
           ? "Pagado"
-          : b.txns.size === 0
-            ? "Pendiente de Pago"
-            : pagado >= b.total - 1
-              ? "Pagado"
-              : "Pago Parcial";
+          : b.txns.size > 0
+            ? "Pago Parcial"
+            : "Pendiente de Pago";
       return {
         billId: b.billId,
         period: b.period,
