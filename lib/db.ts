@@ -1003,17 +1003,15 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   type Agg = {
     billId: string; period: string | null; status: string | null; total: number; totalWithDeposit: number;
     aplicado: number; bia: number; fechaPago: string | null; cuentas: Set<string>; txns: Set<number>;
-    parcial: boolean;
   };
   const map = new Map<string, Agg>();
   for (const r of raws) {
     const id = String(r.bill_id);
     let b = map.get(id);
     if (!b) {
-      b = { billId: id, period: r.period, status: r.bill_status, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set(), parcial: false };
+      b = { billId: id, period: r.period, status: r.bill_status, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set() };
       map.set(id, b);
     }
-    if (r.is_partial_payment === true) b.parcial = true;
     const success = r.transaction_state === "SUCCESS" && r.transaction_id != null;
     if (success && !b.txns.has(r.transaction_id as number)) {
       b.txns.add(r.transaction_id as number);
@@ -1028,11 +1026,15 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
 
   return [...map.values()]
     .map((b) => {
-      const estado: FacturaEstado = b.parcial
-        ? "Pago Parcial"
-        : b.txns.size > 0
-          ? "Pagado"
-          : "Pendiente de Pago";
+      // Estado por MONTOS, no por el flag is_partial_payment: una factura pagada en
+      // varias cuotas que suman el total está "Pagado". total = aplicado + bia_credits.
+      const pagado = b.aplicado + b.bia;
+      const estado: FacturaEstado =
+        b.txns.size === 0
+          ? "Pendiente de Pago"
+          : pagado >= b.total - 1
+            ? "Pagado"
+            : "Pago Parcial";
       return {
         billId: b.billId,
         period: b.period,
