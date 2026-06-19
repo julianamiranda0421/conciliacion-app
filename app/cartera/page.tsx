@@ -54,6 +54,12 @@ export default async function CarteraPage({
     isTodos ? Promise.resolve<FacturaDetalleRow[]>([]) : getFacturasDetalle(current),
   ]);
 
+  // % pagado = Pagado / Valor facturado (mismos valores de las tarjetas). Se usa PISO
+  // (no redondeo) para no mostrar 100% cuando aún queda saldo por pagar.
+  const pctPagado = data.valorFacturado
+    ? Math.floor((data.pagado / data.valorFacturado) * 1000) / 10
+    : 0;
+
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -79,8 +85,7 @@ export default async function CarteraPage({
         <Card
           icon={<Percent className="h-5 w-5 text-success" />}
           label="% pagado"
-          value={`${data.pctPagado.toFixed(1)}%`}
-          sub={`${cop.format(data.pagado)} de ${cop.format(data.valorFacturado)}`}
+          value={`${pctPagado.toFixed(1)}%`}
           accent
         />
       </div>
