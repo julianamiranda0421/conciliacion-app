@@ -750,7 +750,9 @@ export async function getCartera(period?: string): Promise<CarteraData> {
   const sum = (arr: Bill[]) => arr.reduce((s, b) => s + b.total, 0);
   const success = billArr.filter((b) => b.status === "SUCCESS");
   const pendientes = billArr.filter((b) => b.status === "CREATED");
-  const parcial = billArr.filter((b) => b.txns.size > 0 && b.aplicado + b.bia < b.total - 1);
+  // Parcial solo si el total es positivo (las notas crédito/ajustes con total
+  // negativo en SUCCESS están saldadas, no parciales) y lo pagado no cubre el total.
+  const parcial = billArr.filter((b) => b.total > 0 && b.txns.size > 0 && b.aplicado + b.bia < b.total - 1);
   const conCreditos = billArr.filter((b) => b.bia > 0);
 
   const totalFacturas = billArr.length;
@@ -1034,13 +1036,17 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
     .map((b) => {
       // Estado por MONTOS, no por el flag is_partial_payment: una factura pagada en
       // varias cuotas que suman el total está "Pagado". total = aplicado + bia_credits.
+      // Excepción: factura con total negativo (nota crédito/ajuste a favor) en SUCCESS
+      // no tiene nada por pagar → Pagado aunque no tenga transacción de pago.
       const pagado = b.aplicado + b.bia;
       const estado: FacturaEstado =
-        b.txns.size === 0
-          ? "Pendiente de Pago"
-          : pagado >= b.total - 1
-            ? "Pagado"
-            : "Pago Parcial";
+        b.status === "SUCCESS" && b.total < 0
+          ? "Pagado"
+          : b.txns.size === 0
+            ? "Pendiente de Pago"
+            : pagado >= b.total - 1
+              ? "Pagado"
+              : "Pago Parcial";
       return {
         billId: b.billId,
         period: b.period,
