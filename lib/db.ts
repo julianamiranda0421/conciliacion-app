@@ -69,6 +69,8 @@ export async function getReconTransactions(periodo: string): Promise<TxnRow[]> {
       // Solo pagos exitosos: los intentos ERROR generan transacciones duplicadas
       // por factura (mismo valor) y a veces con monto inflado (total de la transacción).
       .eq("transaction_state", "SUCCESS")
+      // Orden por PK `id`: paginación determinista (sin esto se saltan/duplican filas).
+      .order("id", { ascending: true })
       .range(from, from + size - 1);
     if (range) q = q.gte("payment_date", range.start).lt("payment_date", range.end);
     const { data, error } = await q;
@@ -456,6 +458,7 @@ export async function getAdquirencias(period: string): Promise<Adquirencia[]> {
         "fecha_vale,fecha_abono,red,terminal,num_autoriza,tarjeta,tipo_tarjeta,consumo,comision,rete_fuente,rete_iva,rete_ica,neto",
       )
       .eq("period", period)
+      .order("id", { ascending: true })
       .range(from, from + size - 1);
     if (error) {
       // Si la tabla aún no existe, no rompemos la página (devolvemos vacío).
@@ -527,6 +530,7 @@ export async function getPse(period: string): Promise<PseRow[]> {
           "cus,fecha,hora,valor,banco_originador,pagador,tipo_usuario,estado,medio_pago,cod_autorizacion,ticket_id,servicio,cuenta_destino",
         )
         .eq("period", period)
+        .order("id", { ascending: true })
         .range(from, from + size - 1);
       if (error) throw error;
       const rows = (data ?? []) as Record<string, unknown>[];
@@ -657,6 +661,7 @@ export async function listBills360Periods(): Promise<string[]> {
     const { data, error } = await sb
       .from("bills_360")
       .select("period")
+      .order("id", { ascending: true })
       .range(from, from + size - 1);
     if (error) throw new Error(`listBills360Periods: ${error.message}`);
     for (const r of data ?? []) {
@@ -685,7 +690,10 @@ async function fetchCarteraRows(period?: string): Promise<CarteraRow[]> {
   const out: CarteraRow[] = [];
   const size = 1000;
   for (let from = 0; ; from += size) {
-    let q = sb.from("bills_360").select(cols).range(from, from + size - 1);
+    // OJO: ordenar por la PK `id` (única) es OBLIGATORIO. Sin ORDER BY la paginación
+    // por range/offset puede saltarse o duplicar filas entre páginas (Postgres no
+    // garantiza el orden), lo que descuadra los conteos en períodos con varias páginas.
+    let q = sb.from("bills_360").select(cols).order("id", { ascending: true }).range(from, from + size - 1);
     if (period) q = q.eq("period", period);
     const { data, error } = await q;
     if (error) throw new Error(`getCartera: ${error.message}`);
@@ -930,6 +938,7 @@ export async function getCrossingsDetail(bankPeriod?: string): Promise<CrossingD
     let q = sb
       .from("crossings")
       .select("account_id,transaction_id,bill_id_txn,valor_banco,valor_aplicado,diferencia,fecha_banco,tipo")
+      .order("id", { ascending: true })
       .range(from, from + size - 1);
     if (bankPeriod) q = q.eq("period", bankPeriod);
     const { data, error } = await q;
@@ -989,7 +998,8 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   const raws: Raw[] = [];
   const size = 1000;
   for (let from = 0; ; from += size) {
-    let q = sb.from("bills_360").select(cols).range(from, from + size - 1);
+    // Ordenar por la PK `id` para paginación determinista (ver nota en fetchCarteraRows).
+    let q = sb.from("bills_360").select(cols).order("id", { ascending: true }).range(from, from + size - 1);
     if (period) q = q.eq("period", period);
     const { data, error } = await q;
     if (error) throw new Error(`getFacturasDetalle: ${error.message}`);
