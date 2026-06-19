@@ -67,7 +67,7 @@ export function FacturasDetalle({ rows }: { rows: FacturaDetalleRow[] }) {
             <table className="w-full border-collapse">
               <thead className="sticky top-0">
                 <tr>
-                  {["Factura", "Período", "Estado", "Fecha de pago", "Valor factura", "Valor pendiente", "Valor aplicado", "Bia créditos", "Status factura", "Cuenta cruce"].map((h) => (
+                  {["Factura", "Período", "Status factura", "Fecha de pago", "Valor factura", "Valor pendiente", "Valor aplicado", "Bia créditos", "Estado", "Cuenta cruce"].map((h) => (
                     <th key={h} className={th}>{h}</th>
                   ))}
                 </tr>
@@ -78,14 +78,16 @@ export function FacturasDetalle({ rows }: { rows: FacturaDetalleRow[] }) {
                     <td className={td}>{r.billId}</td>
                     <td className={td}>{r.period ?? "—"}</td>
                     <td className={td}>
-                      <span className={`rounded-md px-2 py-1 text-xs font-bold ${ESTADO_BADGE[r.estado]}`}>{r.estado}</span>
+                      <span className={`rounded-md px-2 py-1 text-xs font-bold ${r.status === "SUCCESS" ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>{r.status ?? "—"}</span>
                     </td>
                     <td className={td}>{r.fechaPago ? fmtDate(r.fechaPago) : "—"}</td>
                     <td className={`${tdNum} ${signClass(r.valorFactura)}`}>{money(r.valorFactura)}</td>
                     <td className={`${tdNum} ${signClass(r.valorPendiente)}`}>{r.valorPendiente ? money(r.valorPendiente) : "—"}</td>
                     <td className={`${tdNum} ${signClass(r.valorAplicado)}`}>{r.valorAplicado ? money(r.valorAplicado) : "—"}</td>
                     <td className={`${tdNum} ${signClass(r.biaCreditos)}`}>{r.biaCreditos ? money(r.biaCreditos) : "—"}</td>
-                    <td className={td}>{r.status ?? "—"}</td>
+                    <td className={td}>
+                      <span className={`rounded-md px-2 py-1 text-xs font-bold ${ESTADO_BADGE[r.estado]}`}>{r.estado}</span>
+                    </td>
                     <td className={td}>{r.cuentaCruce || "—"}</td>
                   </tr>
                 ))}
