@@ -90,6 +90,20 @@ export async function POST(req: Request) {
       banco = await parseBankPdf(buf);
     }
 
+    // 2.a) Si no se pudo leer NINGÚN movimiento, no guardar en blanco: avisar. Suele
+    //      pasar si cambia el formato/encabezados del Excel o la hoja está vacía.
+    if (banco.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            account?.format === "excel"
+              ? "No se pudo leer ningún movimiento del extracto. Verifica que el Excel tenga los encabezados esperados (incluye 'Desc Mot.' y 'Valor Total') y que los datos no estén vacíos."
+              : "No se pudo leer ningún movimiento del extracto (PDF). Verifica el archivo.",
+        },
+        { status: 400 },
+      );
+    }
+
     // 2.b) Validar que el extracto SÍ corresponda al mes seleccionado. Evita
     //      sobrescribir por error otro período (ej. subir el extracto de junio
     //      eligiendo "Mayo"). Si ningún movimiento cae en el mes elegido, se bloquea.

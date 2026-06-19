@@ -15,8 +15,17 @@ function toDateStr(v: unknown): string {
 export function parseBankDavivienda(data: Uint8Array): BankMovement[] {
   const wb = XLSX.read(data, { type: "array", cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  // range:1 -> usa la 2da fila como encabezado (la 1ra es el título "Movimientos")
-  const rows = XLSX.utils.sheet_to_json<Row>(sheet, { range: 1, defval: null });
+  // Detectar la fila de encabezado en vez de asumir que es la 2da: Davivienda a veces
+  // antepone más de una fila de título. Se busca la fila que tiene "Desc Mot." y
+  // "Valor Total". Si no se halla, se cae al comportamiento anterior (2da fila).
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
+  const norm = (c: unknown) => String(c ?? "").trim().toLowerCase();
+  let headerIdx = aoa.findIndex((row) => {
+    const cells = (row as unknown[]).map(norm);
+    return cells.some((c) => c.startsWith("desc mot")) && cells.some((c) => c.includes("valor total"));
+  });
+  if (headerIdx < 0) headerIdx = 1;
+  const rows = XLSX.utils.sheet_to_json<Row>(sheet, { range: headerIdx, defval: null });
 
   // Columna "Tran": Nota Credito = ingreso (+), Nota Debito = egreso (−).
   // Todos los valores vienen positivos; el signo se deriva de esta columna.
