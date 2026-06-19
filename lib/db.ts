@@ -733,6 +733,9 @@ export async function getCartera(period?: string): Promise<CarteraData> {
   const creditTxns = new Map<number, number>(); // transaction_id -> bia_credits (dedup global)
 
   for (const r of rows) {
+    // Las facturas DELETED están eliminadas: no cuentan en ningún agregado
+    // (ni Total facturas, ni Valor facturado, ni Pendiente, ni bia créditos).
+    if (r.bill_status === "DELETED") continue;
     let b = bills.get(r.bill_id);
     if (!b) {
       b = { status: r.bill_status, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, bia: 0, txns: new Set() };
@@ -1013,6 +1016,8 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   };
   const map = new Map<string, Agg>();
   for (const r of raws) {
+    // Facturas DELETED (eliminadas) no se muestran en el detalle.
+    if (r.bill_status === "DELETED") continue;
     const id = String(r.bill_id);
     let b = map.get(id);
     if (!b) {
