@@ -3,7 +3,6 @@ import {
   Wallet,
   CheckCircle2,
   Clock,
-  PieChart,
   Sparkles,
   Percent,
   Landmark,
@@ -75,27 +74,25 @@ export default async function CarteraPage({
 
       {/* Encabezado: totales y avance */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card icon={<FileText className="h-5 w-5 text-primary" />} label="Total facturas" value={nf.format(data.totalFacturas)} />
-        <Card icon={<Wallet className="h-5 w-5 text-primary" />} label="Valor total cartera" value={cop.format(data.valorTotal)} />
+        <Card icon={<FileText className="h-5 w-5 text-primary" />} label="Total de facturas" value={nf.format(data.totalFacturas)} />
+        <Card icon={<Wallet className="h-5 w-5 text-primary" />} label="Valor facturado" value={cop.format(data.valorFacturado)} />
         <Card
           icon={<Percent className="h-5 w-5 text-success" />}
           label="% pagado"
-          value={`${data.pctPagadoFacturas.toFixed(1)}%`}
-          sub={`${data.pctPagadoValor.toFixed(1)}% del valor`}
+          value={`${data.pctPagado.toFixed(1)}%`}
+          sub={`${cop.format(data.pagado)} de ${cop.format(data.valorFacturado)}`}
           accent
         />
       </div>
 
       {/* Detalle por estado */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Facturas SUCCESS" value={nf.format(data.facturasSuccess)} />
-        <Card icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Valor pagadas" value={cop.format(data.valorPagadas)} />
+        <Card icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Pagado" value={cop.format(data.pagado)} />
         <Card icon={<Clock className="h-5 w-5 text-amber-500" />} label="Facturas pendientes" value={nf.format(data.facturasPendientes)} />
-        <Card icon={<Clock className="h-5 w-5 text-amber-500" />} label="Valor pendientes" value={cop.format(data.valorPendientes)} />
-        <Card icon={<PieChart className="h-5 w-5 text-primary" />} label="Facturas pago parcial" value={nf.format(data.facturasParcial)} sub="cruza otros estados" />
-        <Card icon={<PieChart className="h-5 w-5 text-primary" />} label="Valor pago parcial" value={cop.format(data.valorParcial)} />
+        <Card icon={<Clock className="h-5 w-5 text-amber-500" />} label="Pendiente de pago" value={cop.format(data.valorPendiente)} />
         <Card icon={<Sparkles className="h-5 w-5 text-sky-500" />} label="Facturas con bia créditos" value={nf.format(data.facturasConCreditos)} />
-        <Card icon={<Sparkles className="h-5 w-5 text-sky-500" />} label="Valor bia créditos usados" value={cop.format(data.valorCreditos)} />
+        <Card icon={<Sparkles className="h-5 w-5 text-sky-500" />} label="Bia Créditos Usados" value={cop.format(data.biaCreditosUsados)} />
       </div>
 
       {/* Caja conciliada: ingreso al banco vs aplicado (por mes de extracto) */}

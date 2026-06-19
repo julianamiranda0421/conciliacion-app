@@ -672,18 +672,16 @@ type CarteraRow = {
   bill_id: number;
   bill_status: string | null;
   total: number | null;
+  total_with_deposit: number | null;
   transaction_id: number | null;
   transaction_state: string | null;
-  payment_date: string | null;
-  is_partial_payment: boolean | null;
-  amount: number | null;
   bia_credits: number | null;
 };
 
 async function fetchCarteraRows(period?: string): Promise<CarteraRow[]> {
   const sb = getSupabase();
   const cols =
-    "bill_id,bill_status,total,transaction_id,transaction_state,payment_date,is_partial_payment,amount,bia_credits";
+    "bill_id,bill_status,total,total_with_deposit,transaction_id,transaction_state,bia_credits";
   const out: CarteraRow[] = [];
   const size = 1000;
   for (let from = 0; ; from += size) {
@@ -698,67 +696,61 @@ async function fetchCarteraRows(period?: string): Promise<CarteraRow[]> {
 }
 
 export type CarteraData = {
-  totalFacturas: number;
-  valorTotal: number;
-  facturasSuccess: number;
-  valorPagadas: number;
-  pctPagadoFacturas: number;
-  pctPagadoValor: number;
-  facturasPendientes: number;
-  valorPendientes: number;
-  facturasParcial: number;
-  valorParcial: number;
+  totalFacturas: number; // facturas creadas en el período
+  valorFacturado: number; // Σ total de TODAS las facturas (las negativas restan)
+  pagado: number; // lo realmente pagado = facturado − pendiente
+  pctPagado: number; // pagado / facturado
+  facturasSuccess: number; // facturas con bill_status SUCCESS
+  facturasPendientes: number; // facturas no SUCCESS
+  valorPendiente: number; // Σ total_with_deposit de las no SUCCESS (saldo si hay abono)
   facturasConCreditos: number;
-  valorCreditos: number;
+  biaCreditosUsados: number; // Σ bia_credits usados (dedup por transacción SUCCESS)
   lastSync: string | null;
 };
 
 // Agregados gerenciales sobre bills_360. period = undefined => todos.
-// OJO: el grano es factura×pago. Para evitar sobreconteo:
-//  - los VALORES de factura se toman de bills.total (una vez por factura);
-//  - el RECAUDO y los BIA CRÉDITOS se deduplican por transaction_id, porque una
-//    misma transacción (amount/bia_credits) se repite en cada factura que paga.
+// OJO: el grano es factura×pago y bills_360 trae el histórico completo (incl. intentos
+// ERROR). Para evitar sobreconteo: los VALORES de factura (total/total_with_deposit) se
+// toman una vez por factura; los BIA CRÉDITOS se deduplican por transaction_id SUCCESS.
+// Modelo de las tarjetas (autoconsistente, Pagado + Pendiente = Facturado):
+//  - Valor facturado = Σ total de TODAS las facturas (las negativas restan).
+//  - Pendiente de pago = Σ total_with_deposit de las facturas NO SUCCESS (eso ya es el
+//    saldo cuando hay abono; y total_with_deposit = total cuando no hay abono).
+//  - Pagado = facturado − pendiente (parcial → total−saldo = abono; SUCCESS → total).
 export async function getCartera(period?: string): Promise<CarteraData> {
   const rows = await fetchCarteraRows(period);
 
-  // OJO: bills_360 trae el histórico completo, incluidos intentos en ERROR. Solo se
-  // consideran transacciones SUCCESS (deduplicadas por transaction_id). El "pago parcial"
-  // se decide por MONTOS (aplicado+bia < total), no por el flag is_partial_payment
-  // (que puede venir de un intento fallido).
-  type Bill = { status: string | null; total: number; aplicado: number; bia: number; txns: Set<number> };
+  type Bill = { status: string | null; total: number; totalWithDeposit: number; bia: number; txns: Set<number> };
   const bills = new Map<number, Bill>();
-  const txns = new Map<number, { credits: number }>();
+  const creditTxns = new Map<number, number>(); // transaction_id -> bia_credits (dedup global)
 
   for (const r of rows) {
     let b = bills.get(r.bill_id);
     if (!b) {
-      b = { status: r.bill_status, total: Number(r.total) || 0, aplicado: 0, bia: 0, txns: new Set() };
+      b = { status: r.bill_status, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, bia: 0, txns: new Set() };
       bills.set(r.bill_id, b);
     }
     const success = r.transaction_state === "SUCCESS" && r.transaction_id != null;
     if (success && !b.txns.has(r.transaction_id as number)) {
       b.txns.add(r.transaction_id as number);
-      b.aplicado += Number(r.amount) || 0;
       b.bia += Number(r.bia_credits) || 0;
-      if (!txns.has(r.transaction_id as number)) {
-        txns.set(r.transaction_id as number, { credits: Number(r.bia_credits) || 0 });
+      if (!creditTxns.has(r.transaction_id as number)) {
+        creditTxns.set(r.transaction_id as number, Number(r.bia_credits) || 0);
       }
     }
   }
 
   const billArr = [...bills.values()];
-  const sum = (arr: Bill[]) => arr.reduce((s, b) => s + b.total, 0);
-  const success = billArr.filter((b) => b.status === "SUCCESS");
-  const pendientes = billArr.filter((b) => b.status === "CREATED");
-  // Parcial solo si el total es positivo (las notas crédito/ajustes con total
-  // negativo en SUCCESS están saldadas, no parciales) y lo pagado no cubre el total.
-  const parcial = billArr.filter((b) => b.total > 0 && b.txns.size > 0 && b.aplicado + b.bia < b.total - 1);
+  const successFacturas = billArr.filter((b) => b.status === "SUCCESS");
+  const pendientesFacturas = billArr.filter((b) => b.status !== "SUCCESS");
   const conCreditos = billArr.filter((b) => b.bia > 0);
 
   const totalFacturas = billArr.length;
-  const valorTotal = sum(billArr);
-  const valorPagadas = sum(success);
-  const valorCreditos = [...txns.values()].reduce((s, t) => s + t.credits, 0);
+  const valorFacturado = billArr.reduce((s, b) => s + b.total, 0);
+  // El saldo pendiente de una factura no-SUCCESS es su total_with_deposit (saldo con abono).
+  const valorPendiente = pendientesFacturas.reduce((s, b) => s + b.totalWithDeposit, 0);
+  const pagado = valorFacturado - valorPendiente;
+  const biaCreditosUsados = [...creditTxns.values()].reduce((s, c) => s + c, 0);
 
   const sb = getSupabase();
   const lastQ = await sb
@@ -770,17 +762,14 @@ export async function getCartera(period?: string): Promise<CarteraData> {
 
   return {
     totalFacturas,
-    valorTotal,
-    facturasSuccess: success.length,
-    valorPagadas,
-    pctPagadoFacturas: totalFacturas ? (success.length / totalFacturas) * 100 : 0,
-    pctPagadoValor: valorTotal ? (valorPagadas / valorTotal) * 100 : 0,
-    facturasPendientes: pendientes.length,
-    valorPendientes: sum(pendientes),
-    facturasParcial: parcial.length,
-    valorParcial: sum(parcial),
+    valorFacturado,
+    pagado,
+    pctPagado: valorFacturado ? (pagado / valorFacturado) * 100 : 0,
+    facturasSuccess: successFacturas.length,
+    facturasPendientes: pendientesFacturas.length,
+    valorPendiente,
     facturasConCreditos: conCreditos.length,
-    valorCreditos,
+    biaCreditosUsados,
     lastSync,
   };
 }
