@@ -721,22 +721,28 @@ export type CarteraData = {
 export async function getCartera(period?: string): Promise<CarteraData> {
   const rows = await fetchCarteraRows(period);
 
-  type Bill = { status: string | null; total: number; paid: boolean; partial: boolean; credits: boolean };
+  // OJO: bills_360 trae el histórico completo, incluidos intentos en ERROR. Solo se
+  // consideran transacciones SUCCESS (deduplicadas por transaction_id). El "pago parcial"
+  // se decide por MONTOS (aplicado+bia < total), no por el flag is_partial_payment
+  // (que puede venir de un intento fallido).
+  type Bill = { status: string | null; total: number; aplicado: number; bia: number; txns: Set<number> };
   const bills = new Map<number, Bill>();
   const txns = new Map<number, { credits: number }>();
 
   for (const r of rows) {
     let b = bills.get(r.bill_id);
     if (!b) {
-      b = { status: r.bill_status, total: Number(r.total) || 0, paid: false, partial: false, credits: false };
+      b = { status: r.bill_status, total: Number(r.total) || 0, aplicado: 0, bia: 0, txns: new Set() };
       bills.set(r.bill_id, b);
     }
-    const success = r.transaction_state === "SUCCESS";
-    if (r.transaction_id != null && success) b.paid = true;
-    if (r.is_partial_payment === true) b.partial = true;
-    if (success && (Number(r.bia_credits) || 0) > 0) b.credits = true;
-    if (r.transaction_id != null && success && !txns.has(r.transaction_id)) {
-      txns.set(r.transaction_id, { credits: Number(r.bia_credits) || 0 });
+    const success = r.transaction_state === "SUCCESS" && r.transaction_id != null;
+    if (success && !b.txns.has(r.transaction_id as number)) {
+      b.txns.add(r.transaction_id as number);
+      b.aplicado += Number(r.amount) || 0;
+      b.bia += Number(r.bia_credits) || 0;
+      if (!txns.has(r.transaction_id as number)) {
+        txns.set(r.transaction_id as number, { credits: Number(r.bia_credits) || 0 });
+      }
     }
   }
 
@@ -744,8 +750,8 @@ export async function getCartera(period?: string): Promise<CarteraData> {
   const sum = (arr: Bill[]) => arr.reduce((s, b) => s + b.total, 0);
   const success = billArr.filter((b) => b.status === "SUCCESS");
   const pendientes = billArr.filter((b) => b.status === "CREATED");
-  const parcial = billArr.filter((b) => b.partial);
-  const conCreditos = billArr.filter((b) => b.credits);
+  const parcial = billArr.filter((b) => b.txns.size > 0 && b.aplicado + b.bia < b.total - 1);
+  const conCreditos = billArr.filter((b) => b.bia > 0);
 
   const totalFacturas = billArr.length;
   const valorTotal = sum(billArr);
