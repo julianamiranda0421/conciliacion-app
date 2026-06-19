@@ -959,12 +959,16 @@ export async function getCrossingsDetail(bankPeriod?: string): Promise<CrossingD
 // status, fecha de pago, bia créditos, valor aplicado y la cuenta contra la que
 // cruzó el pago (si se concilió). Una fila por factura (agrega sus pagos SUCCESS,
 // deduplicando por transaction_id por el grano factura×pago).
+// Estados de negocio derivados (no el bill_status crudo).
+export type FacturaEstado = "Pagado" | "Pago Parcial" | "Pendiente de Pago";
+
 export type FacturaDetalleRow = {
   billId: string;
   period: string | null;
-  status: string | null;
+  estado: FacturaEstado;
   fechaPago: string | null;
   valorFactura: number;
+  valorPendiente: number; // total_with_deposit: lo que falta por pagar si tiene abonos
   valorAplicado: number;
   biaCreditos: number;
   cuentaCruce: string; // etiqueta(s) de cuenta (ej. "Bancolombia 1144"); "" si no cruzó
@@ -977,9 +981,10 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   for (const c of crossings) if (c.transactionId && !crossMap.has(c.transactionId)) crossMap.set(c.transactionId, c.accountId);
 
   const sb = getSupabase();
-  const cols = "bill_id,period,bill_status,total,transaction_id,transaction_state,payment_date,bia_credits,amount";
+  const cols = "bill_id,period,bill_status,total,total_with_deposit,is_partial_payment,transaction_id,transaction_state,payment_date,bia_credits,amount";
   type Raw = {
     bill_id: number; period: string | null; bill_status: string | null; total: number | null;
+    total_with_deposit: number | null; is_partial_payment: boolean | null;
     transaction_id: number | null; transaction_state: string | null; payment_date: string | null;
     bia_credits: number | null; amount: number | null;
   };
@@ -995,17 +1000,19 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   }
 
   type Agg = {
-    billId: string; period: string | null; status: string | null; total: number;
+    billId: string; period: string | null; total: number; totalWithDeposit: number;
     aplicado: number; bia: number; fechaPago: string | null; cuentas: Set<string>; txns: Set<number>;
+    parcial: boolean;
   };
   const map = new Map<string, Agg>();
   for (const r of raws) {
     const id = String(r.bill_id);
     let b = map.get(id);
     if (!b) {
-      b = { billId: id, period: r.period, status: r.bill_status, total: Number(r.total) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set() };
+      b = { billId: id, period: r.period, total: Number(r.total) || 0, totalWithDeposit: Number(r.total_with_deposit) || 0, aplicado: 0, bia: 0, fechaPago: null, cuentas: new Set(), txns: new Set(), parcial: false };
       map.set(id, b);
     }
+    if (r.is_partial_payment === true) b.parcial = true;
     const success = r.transaction_state === "SUCCESS" && r.transaction_id != null;
     if (success && !b.txns.has(r.transaction_id as number)) {
       b.txns.add(r.transaction_id as number);
@@ -1019,15 +1026,23 @@ export async function getFacturasDetalle(period?: string): Promise<FacturaDetall
   }
 
   return [...map.values()]
-    .map((b) => ({
-      billId: b.billId,
-      period: b.period,
-      status: b.status,
-      fechaPago: b.fechaPago,
-      valorFactura: b.total,
-      valorAplicado: b.aplicado,
-      biaCreditos: b.bia,
-      cuentaCruce: [...b.cuentas].map(accountLabel).join(", "),
-    }))
+    .map((b) => {
+      const estado: FacturaEstado = b.parcial
+        ? "Pago Parcial"
+        : b.txns.size > 0
+          ? "Pagado"
+          : "Pendiente de Pago";
+      return {
+        billId: b.billId,
+        period: b.period,
+        estado,
+        fechaPago: b.fechaPago,
+        valorFactura: b.total,
+        valorPendiente: b.totalWithDeposit,
+        valorAplicado: b.aplicado,
+        biaCreditos: b.bia,
+        cuentaCruce: [...b.cuentas].map(accountLabel).join(", "),
+      };
+    })
     .sort((a, b) => Number(b.billId) - Number(a.billId));
 }
