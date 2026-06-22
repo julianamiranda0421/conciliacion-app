@@ -131,29 +131,38 @@ export async function getTcTransactionsByAmounts(
   const uniq = [...new Set(amounts.map((a) => Math.round(a)))];
   const out: TcTxn[] = [];
   const chunk = 100;
+  const page = 1000;
   for (let i = 0; i < uniq.length; i += chunk) {
-    let q = sb
-      .from("bills_360")
-      .select(cols)
-      .eq("transaction_state", "SUCCESS")
-      .in("amount", uniq.slice(i, i + chunk));
-    if (start && end) q = q.gte("payment_date", start).lt("payment_date", end);
-    const { data, error } = await q;
-    if (error) throw new Error(`getTcTransactionsByAmounts: ${error.message}`);
-    for (const r of (data ?? []) as Record<string, unknown>[]) {
-      out.push({
-        transactionId: Number(r.transaction_id),
-        billId: String(r.bill_id ?? ""),
-        amount: Number(r.amount) || 0,
-        biaCredits: Number(r.bia_credits) || 0,
-        total: Number(r.total) || 0,
-        paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
-        period: (r.period as string) ?? null,
-        billStatus: (r.bill_status as string) ?? null,
-        methodType: (r.payment_method_type as string) ?? "",
-        methodName: (r.payment_method_name as string) ?? "",
-        isPartial: r.is_partial_payment === true,
-      });
+    // Paginación interna: un monto repetido (ej. valor redondo) podría matchear
+    // >1000 facturas; sin paginar Supabase cortaría y se perderían candidatas.
+    for (let from = 0; ; from += page) {
+      let q = sb
+        .from("bills_360")
+        .select(cols)
+        .eq("transaction_state", "SUCCESS")
+        .in("amount", uniq.slice(i, i + chunk))
+        .order("id", { ascending: true })
+        .range(from, from + page - 1);
+      if (start && end) q = q.gte("payment_date", start).lt("payment_date", end);
+      const { data, error } = await q;
+      if (error) throw new Error(`getTcTransactionsByAmounts: ${error.message}`);
+      const rows = (data ?? []) as Record<string, unknown>[];
+      for (const r of rows) {
+        out.push({
+          transactionId: Number(r.transaction_id),
+          billId: String(r.bill_id ?? ""),
+          amount: Number(r.amount) || 0,
+          biaCredits: Number(r.bia_credits) || 0,
+          total: Number(r.total) || 0,
+          paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
+          period: (r.period as string) ?? null,
+          billStatus: (r.bill_status as string) ?? null,
+          methodType: (r.payment_method_type as string) ?? "",
+          methodName: (r.payment_method_name as string) ?? "",
+          isPartial: r.is_partial_payment === true,
+        });
+      }
+      if (rows.length < page) break;
     }
   }
   return out;
@@ -271,25 +280,35 @@ export async function getBankMovements(
   accountId: string,
 ): Promise<BankMovement[]> {
   const sb = getSupabase();
-  const { data, error } = await sb
-    .from("bank_movements")
-    .select("fecha,descripcion,sucursal,ref1,ref2,documento,valor,bill_id")
-    .eq("period", period)
-    .eq("account_id", accountId);
-  if (error) throw new Error(`getBankMovements: ${error.message}`);
-  return (data ?? []).map((r) => {
-    const m = r as Record<string, unknown>;
-    return {
-      fecha: String(m.fecha ?? ""),
-      descripcion: String(m.descripcion ?? ""),
-      sucursal: String(m.sucursal ?? ""),
-      ref1: String(m.ref1 ?? ""),
-      ref2: String(m.ref2 ?? ""),
-      documento: String(m.documento ?? ""),
-      valor: Number(m.valor),
-      billId: String(m.bill_id ?? ""),
-    };
-  });
+  // PAGINADO: un extracto de un mes puede superar las 1000 filas (el 5571 ya trae
+  // ~941); sin paginar Supabase cortaría movimientos y descuadraría la conciliación.
+  const out: BankMovement[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb
+      .from("bank_movements")
+      .select("fecha,descripcion,sucursal,ref1,ref2,documento,valor,bill_id")
+      .eq("period", period)
+      .eq("account_id", accountId)
+      .order("id", { ascending: true })
+      .range(from, from + size - 1);
+    if (error) throw new Error(`getBankMovements: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const m of rows) {
+      out.push({
+        fecha: String(m.fecha ?? ""),
+        descripcion: String(m.descripcion ?? ""),
+        sucursal: String(m.sucursal ?? ""),
+        ref1: String(m.ref1 ?? ""),
+        ref2: String(m.ref2 ?? ""),
+        documento: String(m.documento ?? ""),
+        valor: Number(m.valor),
+        billId: String(m.bill_id ?? ""),
+      });
+    }
+    if (rows.length < size) break;
+  }
+  return out;
 }
 
 // ---- Cruces (para la columna "Cuenta cruce") ----
@@ -933,14 +952,23 @@ export async function getBills360ForTxns(txnIds: number[]): Promise<Bill360Mini[
   const sb = getSupabase();
   const out: Bill360Mini[] = [];
   const size = 300;
+  const page = 1000;
   for (let i = 0; i < txnIds.length; i += size) {
     const chunk = txnIds.slice(i, i + size);
-    const { data, error } = await sb
-      .from("bills_360")
-      .select("transaction_id,bill_id,period,total,bill_status,is_partial_payment")
-      .in("transaction_id", chunk);
-    if (error) throw new Error(`getBills360ForTxns: ${error.message}`);
-    out.push(...((data ?? []) as Bill360Mini[]));
+    // Paginación interna: un chunk de txns multi-factura (ACH paga muchas bills)
+    // podría devolver >1000 filas; sin paginar Supabase cortaría facturas.
+    for (let from = 0; ; from += page) {
+      const { data, error } = await sb
+        .from("bills_360")
+        .select("transaction_id,bill_id,period,total,bill_status,is_partial_payment")
+        .in("transaction_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, from + page - 1);
+      if (error) throw new Error(`getBills360ForTxns: ${error.message}`);
+      const rows = (data ?? []) as Bill360Mini[];
+      out.push(...rows);
+      if (rows.length < page) break;
+    }
   }
   return out;
 }
@@ -967,16 +995,24 @@ export type CajaConciliada = {
 
 export async function getCajaConciliada(bankPeriod?: string): Promise<CajaConciliada> {
   const sb = getSupabase();
-  let q = sb.from("crossings").select("account_id,valor_banco,valor_aplicado,diferencia");
-  if (bankPeriod) q = q.eq("period", bankPeriod);
-  const { data, error } = await q;
-  if (error) throw new Error(`getCajaConciliada: ${error.message}`);
-  const rows = (data ?? []) as {
-    account_id: string;
-    valor_banco: number;
-    valor_aplicado: number;
-    diferencia: number;
-  }[];
+  // PAGINADO: suma totales de caja sobre `crossings`, que crece por mes×cuenta y
+  // supera las 1000 filas (sobre todo sin filtro de período); sin paginar Supabase
+  // cortaría filas y subcontaría el ingreso/aplicado mostrado en Cartera.
+  const rows: { account_id: string; valor_banco: number; valor_aplicado: number; diferencia: number }[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb
+      .from("crossings")
+      .select("account_id,valor_banco,valor_aplicado,diferencia")
+      .order("id", { ascending: true })
+      .range(from, from + size - 1);
+    if (bankPeriod) q = q.eq("period", bankPeriod);
+    const { data, error } = await q;
+    if (error) throw new Error(`getCajaConciliada: ${error.message}`);
+    const batch = (data ?? []) as typeof rows;
+    rows.push(...batch);
+    if (batch.length < size) break;
+  }
   const ingresoBanco = rows.reduce((s, r) => s + (Number(r.valor_banco) || 0), 0);
   const aplicado = rows.reduce((s, r) => s + (Number(r.valor_aplicado) || 0), 0);
   const diferencia = rows.reduce((s, r) => s + (Number(r.diferencia) || 0), 0);
