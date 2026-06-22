@@ -218,14 +218,27 @@ export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
 }
 
 // Períodos (meses de extracto) disponibles para conciliar = meses con bank_movements,
-// del más reciente al más antiguo.
+// del más reciente al más antiguo. PAGINADO: sin esto, Supabase corta en 1000 filas
+// y al crecer la tabla (varios meses × cuentas) se pierden períodos del selector
+// (síntoma real: "Mayo desapareció" cuando bank_movements pasó las 1000 filas).
 export async function listReconPeriods(): Promise<string[]> {
   const sb = getSupabase();
-  const { data, error } = await sb.from("bank_movements").select("period");
-  if (error) throw new Error(`listReconPeriods: ${error.message}`);
-  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))].sort(
-    (a, b) => bankPeriodKey(b) - bankPeriodKey(a),
-  );
+  const set = new Set<string>();
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb
+      .from("bank_movements")
+      .select("period")
+      .order("id", { ascending: true })
+      .range(from, from + size - 1);
+    if (error) throw new Error(`listReconPeriods: ${error.message}`);
+    for (const r of data ?? []) {
+      const p = (r as { period: string | null }).period;
+      if (p) set.add(p);
+    }
+    if (!data || data.length < size) break;
+  }
+  return [...set].sort((a, b) => bankPeriodKey(b) - bankPeriodKey(a));
 }
 
 // ---- Movimientos del banco ----
@@ -850,9 +863,24 @@ export async function getCartera(period?: string): Promise<CarteraData> {
 
 export async function listBankPeriods(): Promise<string[]> {
   const sb = getSupabase();
-  const { data, error } = await sb.from("crossings").select("period");
-  if (error) throw new Error(`listBankPeriods: ${error.message}`);
-  return [...new Set((data ?? []).map((r) => (r as { period: string }).period))];
+  const set = new Set<string>();
+  const size = 1000;
+  // PAGINADO: crossings crece por mes×cuenta y supera las 1000 filas (tope de
+  // Supabase); sin paginar se perderían períodos del selector de Caja conciliada.
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb
+      .from("crossings")
+      .select("period")
+      .order("id", { ascending: true })
+      .range(from, from + size - 1);
+    if (error) throw new Error(`listBankPeriods: ${error.message}`);
+    for (const r of data ?? []) {
+      const p = (r as { period: string | null }).period;
+      if (p) set.add(p);
+    }
+    if (!data || data.length < size) break;
+  }
+  return [...set];
 }
 
 // Datos de factura (bills_360) para enriquecer el detalle de conciliación,
