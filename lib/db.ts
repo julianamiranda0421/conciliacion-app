@@ -60,6 +60,13 @@ export async function getReconTransactions(periodo: string): Promise<TxnRow[]> {
   const cols =
     "transaction_id,bill_id,amount,payment_method_type,payment_method_name,transaction_state,payment_date,collection_type,bia_credits,s3_path_document";
   const out: TxnRow[] = [];
+  // Dedup defensivo: bills_360 a veces DUPLICA filas del mismo (transaction_id, bill_id)
+  // — una con método/cus reales y otra con method "BANK_ACCOUNT/null" (data del origen,
+  // payment_bills/dblink). Un mismo pago aplicado a una misma factura es UNA aplicación;
+  // contarla dos veces inflaría la conciliación si esa factura fuera de recaudo. Hoy los
+  // duplicados son todos PSE (no caen en el recaudo físico/8465/ACH), pero esto blinda el
+  // caso futuro. NO afecta facturas distintas de una misma txn (clave = txn|bill).
+  const seen = new Set<string>();
   const size = 1000;
   for (let from = 0; ; from += size) {
     let q = sb
@@ -77,6 +84,9 @@ export async function getReconTransactions(periodo: string): Promise<TxnRow[]> {
     if (error) throw new Error(`getReconTransactions: ${error.message}`);
     const rows = (data ?? []) as Bills360TxnRow[];
     for (const r of rows) {
+      const key = `${r.transaction_id}|${r.bill_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       out.push({
         transactionId: r.transaction_id,
         billId: String(r.bill_id ?? ""),
