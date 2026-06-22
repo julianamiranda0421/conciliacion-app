@@ -65,7 +65,7 @@ export function PsePanel({
     { cls: "primary", lbl: "Archivo ACH (mes)", val: cop(r.achMes), sub: r.achOtroCiclo ? `+ ${cop(r.achOtroCiclo)} de otro ciclo` : "recaudo PSE del operador" },
     { cls: "primary", lbl: "Ingreso 7772 (banco)", val: cop(r.bancoTotal), sub: `${movimientos.length} depósitos "Recaudos Compras Pse"` },
     { cls: diffOk ? "ok" : "bad", lbl: "Diferencia ACH vs 7772", val: cop(r.diffAchVsBanco), sub: diffOk ? "cuadra ✓" : "revisar (ciclo/timing)" },
-    { cls: "ok", lbl: "Conciliado a factura", val: cop(r.valorConciliado), sub: `${r.nConciliado} tx · ${r.nFacturas} facturas (por CUS)` },
+    { cls: "ok", lbl: "Conciliado a factura", val: cop(r.valorConciliado), sub: `${r.nConciliado} tx (${r.nManual} manual) · ${r.nFacturas} facturas` },
     { cls: r.nPendiente > 0 ? "warn" : "ok", lbl: "Pendiente (sin pago plataforma)", val: cop(r.valorPendiente), sub: `${r.nPendiente} tx del ACH sin pago` },
     { cls: "ok", lbl: "Conciliado", val: `${r.pctConciliado}%`, sub: "Conciliado a factura / Archivo ACH", bar: r.pctConciliado },
   ];
@@ -149,7 +149,7 @@ export function PsePanel({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
-                      {["CUS", "Factura", "Período", "Valor ACH", "Ingreso plataforma", "Diferencia", "Valor factura", "Bia créditos", "Banco originador", "Fecha", "Status factura", "Pago", "Observaciones"].map((h) => (
+                      {["CUS", "Factura", "Período", "Tipo", "Valor ACH", "Ingreso plataforma", "Diferencia", "Valor factura", "Bia créditos", "Banco originador", "Fecha", "Status factura", "Pago", "Observaciones"].map((h) => (
                         <th key={h} className={`${th} ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
                       ))}
                     </tr>
@@ -173,6 +173,9 @@ export function PsePanel({
                             </button>
                           </td>
                           <td className={td}>{c.periodo}</td>
+                          <td className={td}>
+                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${c.tipo === "Manual" ? "bg-warning/20 text-warning" : "bg-primary/10 text-primary"}`} title={c.tipo === "Manual" ? `Pago aplicado manual — ${c.transactionIds.length} pagos por s3_path` : "Pago automático (CUS)"}>{c.tipo}</span>
+                          </td>
                           <td className={`${tdNum} ${signClass(c.valorAch)}`}>{cop(c.valorAch)}</td>
                           <td className={`${tdNum} ${signClass(c.ingresoPlataforma)}`}>{cop(c.ingresoPlataforma)}</td>
                           <td className={`${tdNum} ${c.diferencia !== 0 ? "font-bold text-error" : "text-ink-soft"}`}>{cop(c.diferencia)}</td>
@@ -202,13 +205,13 @@ export function PsePanel({
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-line bg-surface font-bold">
-                      <td className={`${td} text-ink-soft`} colSpan={3}>Total</td>
+                      <td className={`${td} text-ink-soft`} colSpan={4}>Total</td>
                       <td className={`${tdNum} ${signClass(sumConcAch)}`}>{cop(sumConcAch)}</td>
                       <td className={`${tdNum} ${signClass(sumConcPlat)}`}>{cop(sumConcPlat)}</td>
                       <td className={td}></td>
                       <td className={`${tdNum} ${signClass(sumConcFact)}`}>{cop(sumConcFact)}</td>
                       <td className={`${tdNum} ${signClass(sumConcBia)}`}>{cop(sumConcBia)}</td>
-                      <td className={td} colSpan={4}></td>
+                      <td className={td} colSpan={5}></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -223,7 +226,8 @@ export function PsePanel({
         <>
           <p className="mt-4 text-xs text-ink-soft">
             Transacciones reportadas por el operador PSE en el archivo ACH que no tienen un pago
-            identificado en la plataforma (cruce por CUS). Revisar: pueden ser de otro ciclo o sin aplicar.
+            identificado en la plataforma (ni por CUS ni por grupo s3 de pago manual). Revisar:
+            pueden ser de otro ciclo o sin aplicar.
           </p>
           <div className="mt-2 flex items-center">
             <span className="ml-auto text-sm text-ink-soft">{pendientes.length} filas · {cop(sumPend)}</span>

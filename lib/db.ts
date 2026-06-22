@@ -189,7 +189,7 @@ export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
   }
   const sb = getSupabase();
   const cols =
-    "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment,cus";
+    "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment,cus,s3_path_document";
   const out: PseTxn[] = [];
   const size = 1000;
   for (let from = 0; ; from += size) {
@@ -219,6 +219,7 @@ export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
         methodName: (r.payment_method_name as string) ?? "",
         isPartial: r.is_partial_payment === true,
         cus: r.cus ? String(r.cus).trim() : "",
+        s3PathDocument: r.s3_path_document ? String(r.s3_path_document).trim() : "",
       });
     }
     if (rows.length < size) break;

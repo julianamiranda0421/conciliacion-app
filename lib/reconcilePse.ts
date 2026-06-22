@@ -10,9 +10,12 @@
 // depósitos del banco deben cuadrar separando ese "otro ciclo". Verificado mayo: el
 // archivo SIN las transacciones del 30-abr ($909.7M) = $27.711.013.185 = banco exacto.
 //
-// Cada transacción del archivo se enriquece por su **CUS** (llave fuerte = el CUS de
-// `payment_bills`/bills_360) con la(s) factura(s) que pagó. Las que no tienen pago en
-// la plataforma quedan como partidas conciliatorias pendientes (para investigar).
+// Cada transacción del archivo se enlaza a su(s) factura(s) en DOS pasadas:
+//   1) AUTOMÁTICO — por CUS (llave fuerte = `payment_bills.cus`, 1:1 con la transacción).
+//   2) MANUAL — pagos aplicados a mano que comparten `s3_path_document` (el comprobante)
+//      y tienen cus=null: un solo ingreso PSE se reparte en varios pagos. Se agrupan por
+//      s3_path y se enlazan a la transacción ACH cuya suma de montos coincide con el valor.
+// Lo que no enlaza por ninguna vía queda como partida conciliatoria pendiente.
 
 import type { BankMovement } from "./parseBank";
 import type { PseRow } from "./parsePse";
@@ -29,7 +32,8 @@ export type PseTxn = {
   billStatus: string | null;
   methodName: string;
   isPartial: boolean;
-  cus: string; // llave de cruce contra el archivo Transacciones ACH
+  cus: string; // llave fuerte (pagos automáticos)
+  s3PathDocument: string; // comprobante; agrupa pagos aplicados manualmente
 };
 
 export type PseFacturaDetalle = {
@@ -41,7 +45,7 @@ export type PseFacturaDetalle = {
   esParcial: boolean;
 };
 
-// Transacción del archivo ACH conciliada (enlazada por CUS a su pago/factura).
+// Transacción del archivo ACH conciliada (por CUS o por grupo s3_path).
 export type PseConciliado = {
   cus: string;
   valorAch: number; // valor del archivo (autoridad)
@@ -49,12 +53,13 @@ export type PseConciliado = {
   bancoOriginador: string;
   pagador: string; // NIT/CC (Referencia 1)
   otroCiclo: boolean; // fecha del archivo cae en otro mes (arrastre/tránsito)
-  // Lado plataforma (por CUS):
-  transactionId: number;
+  tipo: "Automático" | "Manual"; // CUS vs grupo s3_path
+  transactionId: number; // representativa (la 1a del grupo si es manual)
+  transactionIds: number[]; // todas las transacciones de plataforma enlazadas
   facturas: string[];
   periodo: string;
   valorFactura: number; // Σ total de facturas
-  ingresoPlataforma: number; // amount de la transacción (lo que entra al banco)
+  ingresoPlataforma: number; // Σ amount de las transacciones enlazadas
   biaCreditos: number;
   statusFactura: string;
   esParcial: boolean;
@@ -62,7 +67,6 @@ export type PseConciliado = {
   detalleFacturas: PseFacturaDetalle[];
 };
 
-// Transacción del archivo ACH SIN pago en la plataforma (partida conciliatoria).
 export type PsePendiente = {
   cus: string;
   valor: number;
@@ -74,17 +78,18 @@ export type PsePendiente = {
 };
 
 export type PseResumen = {
-  achTotal: number; // archivo ACH (aprobadas), todas las fechas
-  achMes: number; // archivo ACH del mes del período
-  achOtroCiclo: number; // archivo ACH de otro mes (arrastre/tránsito)
-  bancoTotal: number; // depósitos "Recaudos Compras Pse" del 7772
-  diffAchVsBanco: number; // achMes − bancoTotal (debería ~0)
+  achTotal: number;
+  achMes: number;
+  achOtroCiclo: number;
+  bancoTotal: number;
+  diffAchVsBanco: number;
   nConciliado: number;
-  valorConciliado: number; // Σ valorAch de las conciliadas
+  nManual: number; // conciliadas por grupo s3 (pago manual)
+  valorConciliado: number;
   nPendiente: number;
-  valorPendiente: number; // Σ valor de las pendientes
+  valorPendiente: number;
   nFacturas: number;
-  pctConciliado: number; // valorConciliado / achTotal
+  pctConciliado: number;
   porDia: { fecha: string; ach: number; banco: number; diff: number }[];
 };
 
@@ -99,13 +104,13 @@ export type PseResult = {
 };
 
 const r2 = (n: number) => Math.round(n);
+const MATCH_TOL = 2; // tolerancia en pesos para el match por valor (grupos s3)
 
 const MESES_ES: Record<string, number> = {
   enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
   julio: 7, agosto: 8, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
 };
 
-// "Mayo 2026" -> { mes: 5, anio: 2026 }
 function periodMes(period: string): { mes: number; anio: number } | null {
   const m = period.trim().toLowerCase().match(/([a-záéíóú]+)\s+(\d{4})/);
   if (!m) return null;
@@ -114,10 +119,21 @@ function periodMes(period: string): { mes: number; anio: number } | null {
   return mes && anio ? { mes, anio } : null;
 }
 
-// ¿El movimiento del banco es un recaudo PSE? (descripción "Recaudos Compras Pse").
 export function esRecaudoPse(m: BankMovement): boolean {
   return m.valor > 0 && /recaudos?\s+compras?\s+pse/i.test(m.descripcion.trim());
 }
+
+// Transacción de plataforma (agrupa las filas factura×pago de un mismo transaction_id).
+type Txn = {
+  transactionId: number;
+  amount: number;
+  biaCredits: number;
+  paymentDate: string;
+  isPartial: boolean;
+  cus: string;
+  s3: string;
+  bills: PseTxn[];
+};
 
 export function reconcilePse(
   pseFile: PseRow[],
@@ -127,55 +143,91 @@ export function reconcilePse(
 ): PseResult {
   const pm = periodMes(period);
 
-  // Índice de pagos de plataforma por CUS (agrupados por transacción).
-  type Txn = { transactionId: number; amount: number; biaCredits: number; paymentDate: string; isPartial: boolean; bills: PseTxn[] };
-  const byCus = new Map<string, Txn>();
+  // Agrupar pagos por transacción.
+  const txnMap = new Map<number, Txn>();
   for (const r of pseTxns) {
-    const cus = String(r.cus ?? "").trim();
-    if (!cus) continue;
-    let t = byCus.get(cus);
+    let t = txnMap.get(r.transactionId);
     if (!t) {
-      t = { transactionId: r.transactionId, amount: r2(r.amount), biaCredits: r.biaCredits, paymentDate: r.paymentDate, isPartial: r.isPartial, bills: [] };
-      byCus.set(cus, t);
+      t = {
+        transactionId: r.transactionId,
+        amount: r2(r.amount),
+        biaCredits: r.biaCredits,
+        paymentDate: r.paymentDate,
+        isPartial: r.isPartial,
+        cus: String(r.cus ?? "").trim(),
+        s3: String(r.s3PathDocument ?? "").trim(),
+        bills: [],
+      };
+      txnMap.set(r.transactionId, t);
     }
     t.bills.push(r);
   }
+  const byCus = new Map<string, Txn>();
+  for (const t of txnMap.values()) if (t.cus) byCus.set(t.cus, t);
 
   const aprobadas = pseFile.filter((r) => /aprob/i.test(r.estado));
   const esOtroCiclo = (fecha: string): boolean => {
     if (!pm || !fecha) return false;
     const m = fecha.match(/^(\d{4})-(\d{2})/);
-    if (!m) return false;
-    return !(Number(m[1]) === pm.anio && Number(m[2]) === pm.mes);
+    return m ? !(Number(m[1]) === pm.anio && Number(m[2]) === pm.mes) : false;
   };
 
-  const conciliado: PseConciliado[] = [];
-  const pendientes: PsePendiente[] = [];
+  const consumed = new Set<number>();
+  const matchAuto = new Map<PseRow, Txn>();
+  const matchManual = new Map<PseRow, Txn[]>();
 
+  // Pasada 1: CUS (pagos automáticos, 1:1).
   for (const a of aprobadas) {
     const cus = String(a.cus ?? "").trim();
     const t = cus ? byCus.get(cus) : undefined;
-    const otroCiclo = esOtroCiclo(a.fecha);
-    if (!t) {
-      pendientes.push({
-        cus,
-        valor: a.valor,
-        fecha: a.fecha,
-        bancoOriginador: a.bancoOriginador,
-        pagador: a.pagador,
-        estado: a.estado,
-        otroCiclo,
-      });
-      continue;
+    if (t && !consumed.has(t.transactionId)) {
+      matchAuto.set(a, t);
+      consumed.add(t.transactionId);
     }
-    const periodos = [...new Set(t.bills.map((b) => b.period).filter(Boolean))] as string[];
-    const statuses = [...new Set(t.bills.map((b) => b.billStatus).filter(Boolean))] as string[];
-    const valorFactura = t.bills.reduce((s, b) => s + b.total, 0);
+  }
+
+  // Grupos por s3_path entre las transacciones AÚN no consumidas (pagos manuales:
+  // cus=null que comparten comprobante). Suma de montos por grupo.
+  const grupoS3 = new Map<string, Txn[]>();
+  for (const t of txnMap.values()) {
+    if (consumed.has(t.transactionId) || !t.s3) continue;
+    const arr = grupoS3.get(t.s3) ?? [];
+    arr.push(t);
+    grupoS3.set(t.s3, arr);
+  }
+  const sumaGrupo = (g: Txn[]) => g.reduce((s, t) => s + t.amount, 0);
+
+  // Pasada 2: por valor contra grupos s3 (ACH no enlazadas por CUS). Mayor primero.
+  const sinCus = aprobadas.filter((a) => !matchAuto.has(a)).sort((x, y) => y.valor - x.valor);
+  for (const a of sinCus) {
+    let elegido: { key: string; txns: Txn[] } | null = null;
+    for (const [key, txns] of grupoS3) {
+      if (txns.some((t) => consumed.has(t.transactionId))) continue;
+      if (Math.abs(sumaGrupo(txns) - a.valor) <= MATCH_TOL) {
+        elegido = { key, txns };
+        break;
+      }
+    }
+    if (elegido) {
+      matchManual.set(a, elegido.txns);
+      for (const t of elegido.txns) consumed.add(t.transactionId);
+    }
+  }
+
+  // Construir una partida conciliada desde una transacción ACH + sus pagos de plataforma.
+  function build(a: PseRow, txns: Txn[], tipo: "Automático" | "Manual"): PseConciliado {
+    const allBills = txns.flatMap((t) => t.bills);
+    const ingresoPlataforma = txns.reduce((s, t) => s + t.amount, 0);
+    const biaCreditos = txns.reduce((s, t) => s + t.biaCredits, 0);
+    const valorFactura = allBills.reduce((s, b) => s + b.total, 0);
+    const periodos = [...new Set(allBills.map((b) => b.period).filter(Boolean))] as string[];
+    const statuses = [...new Set(allBills.map((b) => b.billStatus).filter(Boolean))] as string[];
+    // valorAplicado por factura = efectivo (ingresoPlataforma) repartido proporcional al total.
     const sumTot = valorFactura || 1;
-    let restoCash = t.amount;
-    const detalleFacturas: PseFacturaDetalle[] = t.bills.map((b, i, arr) => {
-      const aplicado = i === arr.length - 1 ? restoCash : Math.round((t.amount * b.total) / sumTot);
-      restoCash -= aplicado;
+    let resto = ingresoPlataforma;
+    const detalleFacturas: PseFacturaDetalle[] = allBills.map((b, i, arr) => {
+      const aplicado = i === arr.length - 1 ? resto : Math.round((ingresoPlataforma * b.total) / sumTot);
+      resto -= aplicado;
       return {
         billId: b.billId,
         periodo: b.period ?? "—",
@@ -185,24 +237,43 @@ export function reconcilePse(
         esParcial: b.isPartial,
       };
     });
-    conciliado.push({
-      cus,
+    return {
+      cus: String(a.cus ?? "").trim(),
       valorAch: a.valor,
       fechaAch: a.fecha,
       bancoOriginador: a.bancoOriginador,
       pagador: a.pagador,
-      otroCiclo,
-      transactionId: t.transactionId,
-      facturas: t.bills.map((b) => b.billId),
-      periodo: periodos[0] ?? "—",
+      otroCiclo: esOtroCiclo(a.fecha),
+      tipo,
+      transactionId: txns[0]?.transactionId ?? 0,
+      transactionIds: txns.map((t) => t.transactionId),
+      facturas: allBills.map((b) => b.billId),
+      periodo: periodos.length === 1 ? periodos[0] : periodos.join(", ") || "—",
       valorFactura,
-      ingresoPlataforma: t.amount,
-      biaCreditos: t.biaCredits,
+      ingresoPlataforma,
+      biaCreditos,
       statusFactura: statuses.length === 1 ? statuses[0] : statuses.join(", ") || "SUCCESS",
-      esParcial: t.isPartial,
-      diferencia: a.valor - t.amount,
+      esParcial: txns.some((t) => t.isPartial),
+      diferencia: a.valor - ingresoPlataforma,
       detalleFacturas,
-    });
+    };
+  }
+
+  const conciliado: PseConciliado[] = [];
+  const pendientes: PsePendiente[] = [];
+  for (const a of aprobadas) {
+    if (matchAuto.has(a)) conciliado.push(build(a, [matchAuto.get(a)!], "Automático"));
+    else if (matchManual.has(a)) conciliado.push(build(a, matchManual.get(a)!, "Manual"));
+    else
+      pendientes.push({
+        cus: String(a.cus ?? "").trim(),
+        valor: a.valor,
+        fecha: a.fecha,
+        bancoOriginador: a.bancoOriginador,
+        pagador: a.pagador,
+        estado: a.estado,
+        otroCiclo: esOtroCiclo(a.fecha),
+      });
   }
 
   conciliado.sort((a, b) => (b.fechaAch || "").localeCompare(a.fechaAch || "") || b.valorAch - a.valorAch);
@@ -215,12 +286,12 @@ export function reconcilePse(
   const achTotal = aprobadas.reduce((s, r) => s + r.valor, 0);
   const achOtroCiclo = aprobadas.filter((r) => esOtroCiclo(r.fecha)).reduce((s, r) => s + r.valor, 0);
   const achMes = achTotal - achOtroCiclo;
-
   const valorConciliado = conciliado.reduce((s, c) => s + c.valorAch, 0);
   const valorPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
   const nFacturas = conciliado.reduce((s, c) => s + c.facturas.length, 0);
+  const nManual = conciliado.filter((c) => c.tipo === "Manual").length;
 
-  // Cuadre por día: archivo ACH (por fecha) vs depósito banco (por fecha).
+  // Cuadre por día: archivo ACH vs depósito banco.
   const achDia = new Map<string, number>();
   for (const a of aprobadas) achDia.set(a.fecha, (achDia.get(a.fecha) ?? 0) + a.valor);
   const bancoDia = new Map<string, number>();
@@ -228,8 +299,8 @@ export function reconcilePse(
   const dias = [...new Set([...achDia.keys(), ...bancoDia.keys()])].filter(Boolean).sort();
   const porDia = dias.map((fecha) => {
     const ach = achDia.get(fecha) ?? 0;
-    const banco = bancoDia.get(fecha) ?? 0;
-    return { fecha, ach, banco, diff: banco - ach };
+    const bnc = bancoDia.get(fecha) ?? 0;
+    return { fecha, ach, banco: bnc, diff: bnc - ach };
   });
 
   return {
@@ -243,6 +314,7 @@ export function reconcilePse(
       bancoTotal,
       diffAchVsBanco: achMes - bancoTotal,
       nConciliado: conciliado.length,
+      nManual,
       valorConciliado,
       nPendiente: pendientes.length,
       valorPendiente,
