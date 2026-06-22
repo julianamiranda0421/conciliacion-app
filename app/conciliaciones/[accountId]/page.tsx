@@ -122,7 +122,7 @@ async function PseSection({ accountId, period }: { accountId: string; period: st
   }
   return (
     <PsePanel
-      result={reconcilePse(pseTxns, banco, pseFile)}
+      result={reconcilePse(pseFile, pseTxns, banco, period)}
       period={period}
       accountId={accountId}
       observaciones={observaciones}

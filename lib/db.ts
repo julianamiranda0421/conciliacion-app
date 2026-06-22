@@ -161,13 +161,23 @@ export async function getTcTransactionsByAmounts(
 
 import type { PseTxn } from "./reconcilePse";
 
-// Pagos PSE de bills_360 para conciliar el canal PSE del 7772: pagos exitosos cuyo
-// payment_date cae en el mes del extracto y cuyo método es PSE. En bills_360 el PSE
+// Pagos PSE de bills_360 para conciliar el canal PSE del 7772: pagos exitosos con
+// método PSE en una ventana de mes±1 (el cruce real es por CUS contra el archivo
+// Transacciones ACH; la ventana ±1 captura los pagos de borde de mes —ej. el ciclo
+// del 30 que aplica al mes siguiente— sin traer toda la tabla). En bills_360 el PSE
 // llega como payment_method_type='BANK_ACCOUNT' (name "PSE <banco>"); algunos pocos
-// vienen con type null pero name "PSE". El total de estos pagos cuadra con los
-// depósitos "Recaudos Compras Pse" del extracto (verificado mayo 2026).
+// vienen con type null pero name "PSE".
 export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
-  const range = bankPeriodRange(periodo);
+  const mes = bankPeriodRange(periodo);
+  // Ventana ampliada a mes±1 para enlazar por CUS los pagos de borde de mes.
+  let range: { start: string; end: string } | null = null;
+  if (mes) {
+    const [ys, ms] = mes.start.split("-").map(Number);
+    const [ye, me] = mes.end.split("-").map(Number);
+    const start = ms === 1 ? `${ys - 1}-12-01` : `${ys}-${String(ms - 1).padStart(2, "0")}-01`;
+    const end = me === 12 ? `${ye + 1}-01-01` : `${ye}-${String(me + 1).padStart(2, "0")}-01`;
+    range = { start, end };
+  }
   const sb = getSupabase();
   const cols =
     "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment,cus";

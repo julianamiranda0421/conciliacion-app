@@ -6,7 +6,7 @@ import type { PseResult, PseConciliado } from "@/lib/reconcilePse";
 // money (alias cop): mismo formato que el Conciliado físico, negativos con "-$".
 import { fmtDate, signClass, money as cop } from "@/lib/format";
 
-// Tolerancia para "cuadra": el amount de bills_360 trae decimales → diferencia de
+// Tolerancia de cuadre: el amount de bills_360 trae decimales → diferencia de
 // redondeo de unos miles sobre miles de millones se considera cuadre.
 const TOL = 100_000;
 
@@ -23,9 +23,9 @@ export function PsePanel({
 }) {
   const r = result.resumen;
 
-  const [tab, setTab] = useState<"conc" | "mov" | "gw">("conc");
+  const [tab, setTab] = useState<"conc" | "pend" | "mov" | "gw">("conc");
   const [fFactura, setFFactura] = useState("");
-  const [banco, setBanco] = useState("");
+  const [bancoFil, setBancoFil] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
   const [drawer, setDrawer] = useState<PseConciliado | null>(null);
 
@@ -41,38 +41,40 @@ export function PsePanel({
   const conciliadas = useMemo(
     () =>
       result.conciliado.filter(
-        (c) => !fFactura || c.facturas.join(",").includes(fFactura.trim()),
+        (c) =>
+          (!fFactura || c.facturas.join(",").includes(fFactura.trim()) || c.cus.includes(fFactura.trim())),
       ),
     [result.conciliado, fFactura],
   );
+  const pendientes = result.pendientes;
   const movimientos = result.movimientos;
 
-  // Gateway (archivo PSE): filtro por banco originador.
   const bancos = useMemo(
     () => [...new Set(result.gateway.map((g) => g.bancoOriginador).filter(Boolean))].sort(),
     [result.gateway],
   );
   const gatewayFiltrado = useMemo(
-    () => result.gateway.filter((g) => !banco || g.bancoOriginador === banco),
-    [result.gateway, banco],
+    () => result.gateway.filter((g) => !bancoFil || g.bancoOriginador === bancoFil),
+    [result.gateway, bancoFil],
   );
 
-  // KPIs estilo recaudo físico (grid lg:grid-cols-3).
   const valClass = (cls: string) =>
     cls === "ok" ? "text-success" : cls === "bad" ? "text-error" : cls === "warn" ? "text-warning" : cls === "primary" ? "text-primary" : "";
+  const diffOk = Math.abs(r.diffAchVsBanco) <= TOL;
   const kpis: { cls: string; lbl: string; val: string; sub?: string; bar?: number }[] = [
-    { cls: "primary", lbl: "Ingreso Bancario", val: cop(r.ingresoBanco), sub: `${movimientos.length} depósitos "Recaudos Compras Pse"` },
-    { cls: "ok", lbl: "Recaudo conciliado", val: cop(r.totalConciliado), sub: `${r.nTxn} pagos PSE · ${r.nFacturas} facturas` },
-    { cls: Math.abs(r.pendiente) > TOL ? "bad" : "ok", lbl: "Pendiente de conciliar", val: cop(r.pendiente), sub: "Ingreso Bancario − Recaudo conciliado" },
-    { cls: "primary", lbl: "Facturas conciliadas", val: r.nFacturas.toLocaleString("es-CO"), sub: `${r.nTxn} transacciones` },
-    { cls: "primary", lbl: "Gateway (archivo PSE)", val: cop(r.gatewayTotal), sub: `${r.gatewayTxn} tx aprobadas` },
-    { cls: "ok", lbl: "Recaudo", val: `${r.pctRecaudo}%`, sub: "Recaudo conciliado / Ingreso Bancario", bar: r.pctRecaudo },
+    { cls: "primary", lbl: "Archivo ACH (mes)", val: cop(r.achMes), sub: r.achOtroCiclo ? `+ ${cop(r.achOtroCiclo)} de otro ciclo` : "recaudo PSE del operador" },
+    { cls: "primary", lbl: "Ingreso 7772 (banco)", val: cop(r.bancoTotal), sub: `${movimientos.length} depósitos "Recaudos Compras Pse"` },
+    { cls: diffOk ? "ok" : "bad", lbl: "Diferencia ACH vs 7772", val: cop(r.diffAchVsBanco), sub: diffOk ? "cuadra ✓" : "revisar (ciclo/timing)" },
+    { cls: "ok", lbl: "Conciliado a factura", val: cop(r.valorConciliado), sub: `${r.nConciliado} tx · ${r.nFacturas} facturas (por CUS)` },
+    { cls: r.nPendiente > 0 ? "warn" : "ok", lbl: "Pendiente (sin pago plataforma)", val: cop(r.valorPendiente), sub: `${r.nPendiente} tx del ACH sin pago` },
+    { cls: "ok", lbl: "Conciliado", val: `${r.pctConciliado}%`, sub: "Conciliado a factura / Archivo ACH", bar: r.pctConciliado },
   ];
 
   const TABS = [
     { id: "conc" as const, label: "Recaudo Conciliado", n: conciliadas.length },
+    { id: "pend" as const, label: "Partidas Conciliatorias Pendientes", n: pendientes.length },
     { id: "mov" as const, label: "Movimientos Bancarios", n: movimientos.length },
-    { id: "gw" as const, label: "Detalle gateway (archivo PSE)", n: result.gateway.length },
+    { id: "gw" as const, label: "Detalle gateway (archivo ACH)", n: result.gateway.length },
   ];
 
   const th = "whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft";
@@ -80,9 +82,11 @@ export function PsePanel({
   const tdNum = `${td} tabular-nums`;
 
   const sumMov = movimientos.reduce((s, m) => s + m.valor, 0);
+  const sumConcAch = conciliadas.reduce((s, c) => s + c.valorAch, 0);
   const sumConcFact = conciliadas.reduce((s, c) => s + c.valorFactura, 0);
   const sumConcBia = conciliadas.reduce((s, c) => s + c.biaCreditos, 0);
-  const sumConcBanco = conciliadas.reduce((s, c) => s + c.ingresoBanco, 0);
+  const sumConcPlat = conciliadas.reduce((s, c) => s + c.ingresoPlataforma, 0);
+  const sumPend = pendientes.reduce((s, p) => s + p.valor, 0);
   const sumGw = gatewayFiltrado.reduce((s, g) => s + g.valor, 0);
 
   return (
@@ -123,17 +127,17 @@ export function PsePanel({
         })}
       </div>
 
-      {/* === Recaudo Conciliado (pagos PSE de bills_360 → factura) === */}
+      {/* === Recaudo Conciliado (transacciones ACH enlazadas por CUS a factura) === */}
       {tab === "conc" && (
         <>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <input
               value={fFactura}
               onChange={(e) => setFFactura(e.target.value)}
-              placeholder="Buscar factura…"
-              className="h-10 w-44 rounded-md border border-line bg-white px-3 text-sm"
+              placeholder="Buscar factura o CUS…"
+              className="h-10 w-52 rounded-md border border-line bg-white px-3 text-sm"
             />
-            <span className="ml-auto text-sm text-ink-soft">{conciliadas.length} filas · {cop(sumConcBanco)}</span>
+            <span className="ml-auto text-sm text-ink-soft">{conciliadas.length} filas · {cop(sumConcAch)}</span>
           </div>
           {conciliadas.length === 0 ? (
             <div className="mt-4 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
@@ -145,7 +149,7 @@ export function PsePanel({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
-                      {["TransacciónID", "Factura", "Período", "Valor factura", "Bia créditos", "Ingreso Bancario", "Método", "Fecha pago", "Status factura", "Pago", "Observaciones"].map((h) => (
+                      {["CUS", "Factura", "Período", "Valor ACH", "Ingreso plataforma", "Diferencia", "Valor factura", "Bia créditos", "Banco originador", "Fecha", "Status factura", "Pago", "Observaciones"].map((h) => (
                         <th key={h} className={`${th} ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
                       ))}
                     </tr>
@@ -154,8 +158,11 @@ export function PsePanel({
                     {conciliadas.map((c, i) => {
                       const statusOk = c.statusFactura === "SUCCESS";
                       return (
-                        <tr key={i} className="hover:bg-primary-light/40">
-                          <td className={tdNum}>{c.transactionId}</td>
+                        <tr key={i} className={`hover:bg-primary-light/40 ${c.otroCiclo ? "bg-warning/5" : ""}`}>
+                          <td className={td}>
+                            {c.cus}
+                            {c.otroCiclo && <span className="ml-1 rounded bg-warning/20 px-1 text-[10px] font-bold text-warning" title="Fecha de otro ciclo (arrastre/tránsito)">ciclo</span>}
+                          </td>
                           <td className="min-w-[160px] border-b border-line px-3 py-2.5 text-center text-sm">
                             <button
                               onClick={() => setDrawer(c)}
@@ -166,11 +173,13 @@ export function PsePanel({
                             </button>
                           </td>
                           <td className={td}>{c.periodo}</td>
+                          <td className={`${tdNum} ${signClass(c.valorAch)}`}>{cop(c.valorAch)}</td>
+                          <td className={`${tdNum} ${signClass(c.ingresoPlataforma)}`}>{cop(c.ingresoPlataforma)}</td>
+                          <td className={`${tdNum} ${c.diferencia !== 0 ? "font-bold text-error" : "text-ink-soft"}`}>{cop(c.diferencia)}</td>
                           <td className={`${tdNum} ${signClass(c.valorFactura)}`}>{cop(c.valorFactura)}</td>
                           <td className={`${tdNum} ${signClass(c.biaCreditos)}`}>{cop(c.biaCreditos)}</td>
-                          <td className={`${tdNum} ${signClass(c.ingresoBanco)}`}>{cop(c.ingresoBanco)}</td>
-                          <td className={td}>{c.metodo}</td>
-                          <td className={td}>{fmtDate(c.paymentDate)}</td>
+                          <td className={td}>{c.bancoOriginador}</td>
+                          <td className={td}>{fmtDate(c.fechaAch)}</td>
                           <td className={td}>
                             <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>{c.statusFactura}</span>
                           </td>
@@ -184,7 +193,7 @@ export function PsePanel({
                               onBlur={(e) => saveNote(c.transactionId, e.target.value)}
                               onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                               placeholder="—"
-                              className="h-8 w-52 rounded-md border border-line px-2 text-xs"
+                              className="h-8 w-44 rounded-md border border-line px-2 text-xs"
                             />
                           </td>
                         </tr>
@@ -194,10 +203,63 @@ export function PsePanel({
                   <tfoot>
                     <tr className="border-t-2 border-line bg-surface font-bold">
                       <td className={`${td} text-ink-soft`} colSpan={3}>Total</td>
+                      <td className={`${tdNum} ${signClass(sumConcAch)}`}>{cop(sumConcAch)}</td>
+                      <td className={`${tdNum} ${signClass(sumConcPlat)}`}>{cop(sumConcPlat)}</td>
+                      <td className={td}></td>
                       <td className={`${tdNum} ${signClass(sumConcFact)}`}>{cop(sumConcFact)}</td>
                       <td className={`${tdNum} ${signClass(sumConcBia)}`}>{cop(sumConcBia)}</td>
-                      <td className={`${tdNum} ${signClass(sumConcBanco)}`}>{cop(sumConcBanco)}</td>
-                      <td className={td} colSpan={5}></td>
+                      <td className={td} colSpan={4}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* === Partidas Pendientes (transacciones ACH SIN pago en plataforma) === */}
+      {tab === "pend" && (
+        <>
+          <p className="mt-4 text-xs text-ink-soft">
+            Transacciones reportadas por el operador PSE en el archivo ACH que no tienen un pago
+            identificado en la plataforma (cruce por CUS). Revisar: pueden ser de otro ciclo o sin aplicar.
+          </p>
+          <div className="mt-2 flex items-center">
+            <span className="ml-auto text-sm text-ink-soft">{pendientes.length} filas · {cop(sumPend)}</span>
+          </div>
+          {pendientes.length === 0 ? (
+            <div className="mt-2 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
+              Sin partidas pendientes ✓
+            </div>
+          ) : (
+            <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>{["CUS", "Valor", "Fecha", "Banco originador", "Pagador (NIT/CC)", "Ciclo"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {pendientes.map((p, i) => (
+                      <tr key={i} className={`hover:bg-primary-light/40 ${p.otroCiclo ? "bg-warning/5" : ""}`}>
+                        <td className={td}>{p.cus}</td>
+                        <td className={`${tdNum} ${signClass(p.valor)}`}>{cop(p.valor)}</td>
+                        <td className={td}>{fmtDate(p.fecha)}</td>
+                        <td className={td}>{p.bancoOriginador}</td>
+                        <td className={td}>{p.pagador}</td>
+                        <td className={td}>
+                          {p.otroCiclo
+                            ? <span className="rounded-md bg-warning/20 px-2 py-1 text-xs font-bold text-warning">Otro ciclo</span>
+                            : <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error">Sin pago</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-line bg-surface font-bold">
+                      <td className={`${td} text-ink-soft`}>Total</td>
+                      <td className={`${tdNum} ${signClass(sumPend)}`}>{cop(sumPend)}</td>
+                      <td className={td} colSpan={4}></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -245,22 +307,21 @@ export function PsePanel({
             </div>
           )}
 
-          {/* Cuadre por día: PSE de plataforma (bills_360) vs depósito del banco.
-              El banco abona el PSE con ~1 día de rezago, así que el diario NO coincide
-              día a día aunque el total del mes sí cuadre — la diferencia es timing. */}
+          {/* Cuadre por día: archivo ACH (por fecha) vs depósito banco. El banco abona
+              con rezago de ciclo, así que el diario no coincide; el total del mes sí. */}
           <details className="mt-4 rounded-lg border border-line bg-white">
             <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium">
-              Cuadre por día (PSE plataforma vs depósito banco)
+              Cuadre por día (archivo ACH vs depósito banco)
             </summary>
             <p className="px-4 pb-2 text-xs text-ink-soft">
-              El banco abona el PSE con ~1 día de rezago, por eso el diario no coincide exacto;
-              el total del mes sí cuadra ({cop(r.totalConciliado)} plataforma vs {cop(r.ingresoBanco)} banco).
+              El banco abona el PSE por ciclo (con rezago), por eso el diario no coincide exacto.
+              Mes: archivo ACH {cop(r.achMes)} vs banco {cop(r.bancoTotal)} → diferencia {cop(r.diffAchVsBanco)}.
             </p>
             <div className="overflow-x-auto border-t border-line">
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>
-                    {["Fecha", "PSE plataforma", "Depósito banco", "Diferencia"].map((h) => (
+                    {["Fecha", "Archivo ACH", "Depósito banco", "Diferencia"].map((h) => (
                       <th key={h} className="border-b border-line bg-surface px-4 py-2 text-center text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
                     ))}
                   </tr>
@@ -269,37 +330,28 @@ export function PsePanel({
                   {r.porDia.map((d) => (
                     <tr key={d.fecha}>
                       <td className="border-b border-line px-4 py-2 text-center">{fmtDate(d.fecha)}</td>
-                      <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.plataforma)}`}>{cop(d.plataforma)}</td>
+                      <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.ach)}`}>{cop(d.ach)}</td>
                       <td className={`border-b border-line px-4 py-2 text-center tabular-nums ${signClass(d.banco)}`}>{cop(d.banco)}</td>
-                      <td className={`border-b border-line px-4 py-2 text-center tabular-nums text-ink-soft`}>{cop(d.diff)}</td>
+                      <td className="border-b border-line px-4 py-2 text-center tabular-nums text-ink-soft">{cop(d.diff)}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-line bg-surface font-bold">
-                    <td className="px-4 py-2 text-center text-ink-soft">Total</td>
-                    <td className={`px-4 py-2 text-center tabular-nums ${signClass(r.totalConciliado)}`}>{cop(r.totalConciliado)}</td>
-                    <td className={`px-4 py-2 text-center tabular-nums ${signClass(r.ingresoBanco)}`}>{cop(r.ingresoBanco)}</td>
-                    <td className={`px-4 py-2 text-center tabular-nums ${Math.abs(r.pendiente) >= TOL ? "text-error" : "text-ink-soft"}`}>{cop(r.ingresoBanco - r.totalConciliado)}</td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
           </details>
         </>
       )}
 
-      {/* === Detalle gateway (archivo PSE) === */}
+      {/* === Detalle gateway (archivo ACH completo) === */}
       {tab === "gw" && (
         <>
           <p className="mt-4 text-xs text-ink-soft">
-            Detalle del gateway PSE (archivo &quot;Transacciones ACH&quot;) de {period}. Es la capa de
-            validación: su total cuadra con los depósitos del banco. No trae número de factura.
+            Archivo Transacciones ACH (reporte del operador PSE) de {period}: {result.gateway.length} transacciones.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <select
-              value={banco}
-              onChange={(e) => setBanco(e.target.value)}
+              value={bancoFil}
+              onChange={(e) => setBancoFil(e.target.value)}
               className="h-10 rounded-md border border-line bg-white px-3 text-sm"
             >
               <option value="">Banco originador: Todos</option>
@@ -311,7 +363,7 @@ export function PsePanel({
           </div>
           {gatewayFiltrado.length === 0 ? (
             <div className="mt-4 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
-              Sin transacciones PSE para este filtro.
+              Sin transacciones para este filtro.
             </div>
           ) : (
             <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
@@ -375,7 +427,7 @@ function FacturasDrawer({ conciliado, onClose }: { conciliado: PseConciliado; on
           <div>
             <h3 className="text-base font-bold">Detalle del pago por factura</h3>
             <p className="mt-0.5 text-xs text-ink-soft">
-              Ingreso al banco <b>{cop(conciliado.ingresoBanco)}</b> · {filas.length} factura(s)
+              CUS <b>{conciliado.cus}</b> · ingreso al banco <b>{cop(conciliado.ingresoPlataforma)}</b> · {filas.length} factura(s)
               {conciliado.transactionId ? ` · TransacciónID ${conciliado.transactionId}` : ""}
             </p>
           </div>
@@ -435,20 +487,20 @@ function FacturasDrawer({ conciliado, onClose }: { conciliado: PseConciliado; on
 
           <div className="mt-4 rounded-lg border border-line bg-surface/50 px-4 py-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-ink-soft">Valor facturas</span>
-              <span className="tabular-nums">{cop(sumFactura)}</span>
+              <span className="text-ink-soft">Valor ACH (operador)</span>
+              <span className="tabular-nums">{cop(conciliado.valorAch)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between">
-              <span className="text-ink-soft">Valor aplicado (ingreso al banco)</span>
-              <span className="tabular-nums">{cop(sumAplicado)}</span>
+              <span className="text-ink-soft">Ingreso plataforma (amount)</span>
+              <span className="tabular-nums">{cop(conciliado.ingresoPlataforma)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between">
               <span className="text-ink-soft">Bia créditos</span>
               <span className="tabular-nums">{cop(conciliado.biaCreditos)}</span>
             </div>
             <div className="mt-2 flex items-center justify-between border-t border-line pt-2 font-semibold">
-              <span>Total</span>
-              <span className="tabular-nums">{cop(sumAplicado + conciliado.biaCreditos)}</span>
+              <span>Valor facturas</span>
+              <span className="tabular-nums">{cop(sumFactura)}</span>
             </div>
           </div>
         </div>
