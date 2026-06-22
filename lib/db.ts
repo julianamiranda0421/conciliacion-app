@@ -159,6 +159,53 @@ export async function getTcTransactionsByAmounts(
   return out;
 }
 
+import type { PseTxn } from "./reconcilePse";
+
+// Pagos PSE de bills_360 para conciliar el canal PSE del 7772: pagos exitosos cuyo
+// payment_date cae en el mes del extracto y cuyo método es PSE. En bills_360 el PSE
+// llega como payment_method_type='BANK_ACCOUNT' (name "PSE <banco>"); algunos pocos
+// vienen con type null pero name "PSE". El total de estos pagos cuadra con los
+// depósitos "Recaudos Compras Pse" del extracto (verificado mayo 2026).
+export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
+  const range = bankPeriodRange(periodo);
+  const sb = getSupabase();
+  const cols =
+    "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment";
+  const out: PseTxn[] = [];
+  const size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = sb
+      .from("bills_360")
+      .select(cols)
+      .not("transaction_id", "is", null)
+      .eq("transaction_state", "SUCCESS")
+      // PSE = BANK_ACCOUNT o cualquier método cuyo nombre contenga "PSE".
+      .or("payment_method_type.eq.BANK_ACCOUNT,payment_method_name.ilike.%PSE%")
+      .order("id", { ascending: true })
+      .range(from, from + size - 1);
+    if (range) q = q.gte("payment_date", range.start).lt("payment_date", range.end);
+    const { data, error } = await q;
+    if (error) throw new Error(`getPseTransactions: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const r of rows) {
+      out.push({
+        transactionId: Number(r.transaction_id),
+        billId: String(r.bill_id ?? ""),
+        amount: Number(r.amount) || 0,
+        biaCredits: Number(r.bia_credits) || 0,
+        total: Number(r.total) || 0,
+        paymentDate: r.payment_date ? String(r.payment_date).slice(0, 10) : "",
+        period: (r.period as string) ?? null,
+        billStatus: (r.bill_status as string) ?? null,
+        methodName: (r.payment_method_name as string) ?? "",
+        isPartial: r.is_partial_payment === true,
+      });
+    }
+    if (rows.length < size) break;
+  }
+  return out;
+}
+
 // Períodos (meses de extracto) disponibles para conciliar = meses con bank_movements,
 // del más reciente al más antiguo.
 export async function listReconPeriods(): Promise<string[]> {

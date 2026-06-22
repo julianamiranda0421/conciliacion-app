@@ -4,8 +4,9 @@ import { ArrowLeft } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations, getPse, getDevObservations } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations, getPse, getPseTransactions, getDevObservations } from "@/lib/db";
 import { reconcileTC } from "@/lib/reconcileTC";
+import { reconcilePse } from "@/lib/reconcilePse";
 import { Dashboard } from "@/components/Dashboard";
 import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
 import { TarjetaCreditoPanel } from "@/components/TarjetaCreditoPanel";
@@ -74,7 +75,7 @@ export default async function ConciliacionCuentaPage({
             resumen={hasData ? <Resumen7772Section accountId={accountId} period={period} /> : <NoBankData period={period} />}
             fisico={hasData ? <AccountDashboard accountId={accountId} period={period} /> : <NoBankData period={period} />}
             tc={<TarjetaCreditoSection accountId={accountId} period={period} />}
-            pse={<PseSection period={period} />}
+            pse={<PseSection accountId={accountId} period={period} />}
           />
         ) : !hasData ? (
           <NoBankData period={period} />
@@ -98,22 +99,35 @@ function NoBankData({ period }: { period: string }) {
   );
 }
 
-// Detalle del recaudo PSE del 7772 (archivo "Transacciones ACH"). Por ahora solo
-// muestra el detalle cargado; el cruce contra el extracto se definirá después.
-async function PseSection({ period }: { period: string }) {
-  const pse = await getPse(period);
-  if (pse.length === 0) {
+// Conciliación del canal PSE del 7772: los pagos PSE de bills_360 (con su factura)
+// cruzan contra los depósitos "Recaudos Compras Pse" del extracto. El archivo PSE
+// ("Transacciones ACH") se usa como validación del gateway (detalle pagador/banco).
+async function PseSection({ accountId, period }: { accountId: string; period: string }) {
+  const [pseFile, banco, pseTxns, observaciones] = await Promise.all([
+    getPse(period),
+    getBankMovements(period, accountId),
+    getPseTransactions(period),
+    getObservations(period, accountId),
+  ]);
+  if (pseFile.length === 0 && pseTxns.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-line bg-white px-6 py-10 text-center text-sm text-ink-soft">
         Aún no has cargado el archivo de PSE para {period}. Cárgalo desde{" "}
         <Link href="/cargas/nueva" className="font-medium text-primary hover:underline">
           Cargas → Nueva carga → PSE
         </Link>{" "}
-        para ver el detalle del recaudo PSE.
+        para ver el recaudo PSE.
       </div>
     );
   }
-  return <PsePanel rows={pse} period={period} />;
+  return (
+    <PsePanel
+      result={reconcilePse(pseTxns, banco, pseFile)}
+      period={period}
+      accountId={accountId}
+      observaciones={observaciones}
+    />
+  );
 }
 
 // Resumen consolidado del 7772: ingreso total por canal + extracto completo.
