@@ -211,21 +211,43 @@ export function reconcilePse(
     grupoS3.set(t.s3, arr);
   }
   const sumaGrupo = (g: Txn[]) => g.reduce((s, t) => s + t.amount, 0);
+  const disponible = (txns: Txn[]) => !txns.some((t) => consumed.has(t.transactionId));
 
   // Pasada 2: por valor contra grupos s3 (ACH no enlazadas por CUS). Mayor primero.
   const sinCus = aprobadas.filter((a) => !matchAuto.has(a)).sort((x, y) => y.valor - x.valor);
+
+  // 2a) EXACTO (±$2): consume primero los grupos cuya suma calza al peso.
   for (const a of sinCus) {
-    let elegido: { key: string; txns: Txn[] } | null = null;
-    for (const [key, txns] of grupoS3) {
-      if (txns.some((t) => consumed.has(t.transactionId))) continue;
+    for (const [, txns] of grupoS3) {
+      if (!disponible(txns)) continue;
       if (Math.abs(sumaGrupo(txns) - a.valor) <= MATCH_TOL) {
-        elegido = { key, txns };
+        matchManual.set(a, txns);
+        for (const t of txns) consumed.add(t.transactionId);
         break;
       }
     }
-    if (elegido) {
-      matchManual.set(a, elegido.txns);
-      for (const t of elegido.txns) consumed.add(t.transactionId);
+  }
+  // 2b) CERCANO: para las que aún no enlazan, tomar el grupo s3 cuyo monto sea el MÁS
+  //     cercano dentro de una tolerancia (1% del valor, máx $100.000). Cubre diferencias
+  //     reales operador-vs-plataforma (comisión/ajuste) — ej. ACH 4.548.273 vs grupo
+  //     4.528.417 (facturas 82582+82662) = $19.856. La diferencia se MUESTRA (col Diferencia),
+  //     no se esconde. El tope evita falsos positivos en montos grandes.
+  for (const a of sinCus) {
+    if (matchManual.has(a)) continue;
+    const tol = Math.min(Math.max(MATCH_TOL, Math.round(a.valor * 0.01)), 100_000);
+    let best: Txn[] | null = null;
+    let bestDiff = Infinity;
+    for (const [, txns] of grupoS3) {
+      if (!disponible(txns)) continue;
+      const d = Math.abs(sumaGrupo(txns) - a.valor);
+      if (d <= tol && d < bestDiff) {
+        best = txns;
+        bestDiff = d;
+      }
+    }
+    if (best) {
+      matchManual.set(a, best);
+      for (const t of best) consumed.add(t.transactionId);
     }
   }
 
