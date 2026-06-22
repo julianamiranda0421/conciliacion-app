@@ -170,7 +170,7 @@ export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
   const range = bankPeriodRange(periodo);
   const sb = getSupabase();
   const cols =
-    "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment";
+    "transaction_id,bill_id,amount,bia_credits,total,payment_date,period,bill_status,payment_method_type,payment_method_name,is_partial_payment,cus";
   const out: PseTxn[] = [];
   const size = 1000;
   for (let from = 0; ; from += size) {
@@ -199,6 +199,7 @@ export async function getPseTransactions(periodo: string): Promise<PseTxn[]> {
         billStatus: (r.bill_status as string) ?? null,
         methodName: (r.payment_method_name as string) ?? "",
         isPartial: r.is_partial_payment === true,
+        cus: r.cus ? String(r.cus).trim() : "",
       });
     }
     if (rows.length < size) break;
@@ -654,6 +655,7 @@ export async function saveBills360(rows: Bill360Raw[]): Promise<number> {
     collection_type: cleanText(r.collection_type),
     network_collection: cleanText(r.network_collection),
     reference_bill: cleanText(r.reference_bill),
+    cus: cleanText(r.cus),
     is_partial_payment: r.is_partial_payment,
     amount: r.amount,
     bia_credits: r.bia_credits,

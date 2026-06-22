@@ -27,6 +27,7 @@ export type PseTxn = {
   billStatus: string | null;
   methodName: string; // "PSE BANCOLOMBIA" / ...
   isPartial: boolean;
+  cus: string; // CUS del pago (llave fuerte contra el archivo Transacciones ACH)
 };
 
 // Detalle por factura del pago (para el drawer). Σ valorFactura = amount + bia.

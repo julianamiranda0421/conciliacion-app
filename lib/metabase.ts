@@ -29,6 +29,7 @@ export type Bill360Raw = {
   collection_type: string | null;
   network_collection: string | null;
   reference_bill: string | null;
+  cus: string | null; // CUS del pago PSE (llave del archivo Transacciones ACH)
   is_partial_payment: boolean | null;
   amount: number | null;
   bia_credits: number | null;

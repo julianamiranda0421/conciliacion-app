@@ -91,6 +91,7 @@ create table if not exists bills_360 (
   collection_type      text,
   network_collection   text,
   reference_bill       text,
+  cus                  text,  -- CUS del pago PSE (llave del archivo Transacciones ACH)
   is_partial_payment   boolean,
   amount               numeric,
   bia_credits          numeric,
