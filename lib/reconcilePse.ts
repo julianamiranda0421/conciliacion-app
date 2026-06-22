@@ -143,8 +143,14 @@ export function reconcilePse(
 ): PseResult {
   const pm = periodMes(period);
 
-  // Agrupar pagos por transacción.
+  // Agrupar pagos por transacción. OJO: bills_360 a veces DUPLICA filas del mismo
+  // (transaction_id, bill_id) — una con método/cus reales (PSE, cus=308420986) y otra
+  // con method "BANK_ACCOUNT/null" y cus=null (visto en bill 82204 / txn 546355). Por
+  // eso (a) el cus/s3 de la transacción se toma del valor NO vacío de cualquiera de sus
+  // filas (si tomáramos el de la 1a fila y fuera la null, perderíamos el CUS y la
+  // transacción caería a pendiente) y (b) las facturas se DEDUPLICAN por bill_id.
   const txnMap = new Map<number, Txn>();
+  const seenBills = new Map<number, Set<string>>();
   for (const r of pseTxns) {
     let t = txnMap.get(r.transactionId);
     if (!t) {
@@ -154,13 +160,22 @@ export function reconcilePse(
         biaCredits: r.biaCredits,
         paymentDate: r.paymentDate,
         isPartial: r.isPartial,
-        cus: String(r.cus ?? "").trim(),
-        s3: String(r.s3PathDocument ?? "").trim(),
+        cus: "",
+        s3: "",
         bills: [],
       };
       txnMap.set(r.transactionId, t);
+      seenBills.set(r.transactionId, new Set());
     }
-    t.bills.push(r);
+    const cus = String(r.cus ?? "").trim();
+    if (!t.cus && cus) t.cus = cus;
+    const s3 = String(r.s3PathDocument ?? "").trim();
+    if (!t.s3 && s3) t.s3 = s3;
+    const seen = seenBills.get(r.transactionId)!;
+    if (!seen.has(r.billId)) {
+      seen.add(r.billId);
+      t.bills.push(r);
+    }
   }
   const byCus = new Map<string, Txn>();
   for (const t of txnMap.values()) if (t.cus) byCus.set(t.cus, t);
