@@ -27,6 +27,7 @@ export function PsePanel({
 
   const [tab, setTab] = useState<"conc" | "pend" | "mov" | "gw">("conc");
   const [fFactura, setFFactura] = useState("");
+  const [soloDif, setSoloDif] = useState(false); // filtrar solo cruces con diferencia
   const [bancoFil, setBancoFil] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
   const [pendNotes, setPendNotes] = useState<Record<string, string>>(pendienteObs);
@@ -55,9 +56,10 @@ export function PsePanel({
     () =>
       result.conciliado.filter(
         (c) =>
-          (!fFactura || c.facturas.join(",").includes(fFactura.trim()) || c.cus.includes(fFactura.trim())),
+          (!fFactura || c.facturas.join(",").includes(fFactura.trim()) || c.cus.includes(fFactura.trim())) &&
+          (!soloDif || Math.round(c.diferencia) !== 0),
       ),
-    [result.conciliado, fFactura],
+    [result.conciliado, fFactura, soloDif],
   );
   const pendientes = result.pendientes;
   const movimientos = result.movimientos;
@@ -150,6 +152,14 @@ export function PsePanel({
               placeholder="Buscar factura o CUS…"
               className="h-10 w-52 rounded-md border border-line bg-white px-3 text-sm"
             />
+            <select
+              value={soloDif ? "dif" : ""}
+              onChange={(e) => setSoloDif(e.target.value === "dif")}
+              className="h-10 rounded-md border border-line bg-white px-3 text-sm"
+            >
+              <option value="">Diferencia: Todas</option>
+              <option value="dif">Solo con diferencia</option>
+            </select>
             <span className="ml-auto text-sm text-ink-soft">{conciliadas.length} filas · {cop(sumConcAch)}</span>
           </div>
           {conciliadas.length === 0 ? (
@@ -162,7 +172,7 @@ export function PsePanel({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
-                      {["CUS", "Factura", "Período", "Tipo", "Valor ACH", "Ingreso plataforma", "Diferencia", "Valor factura", "Bia créditos", "Banco originador", "Fecha", "Status factura", "Pago", "Observaciones"].map((h) => (
+                      {["CUS", "Factura", "Período", "Valor ACH", "Ingreso plataforma", "Diferencia", "Valor factura", "Bia créditos", "Banco originador", "Fecha", "Status factura", "Pago", "Observaciones"].map((h) => (
                         <th key={h} className={`${th} ${h === "Factura" ? "min-w-[160px]" : ""}`}>{h}</th>
                       ))}
                     </tr>
@@ -185,9 +195,8 @@ export function PsePanel({
                               {c.facturas.join(", ")}
                             </button>
                           </td>
-                          <td className={td}>{c.periodo}</td>
                           <td className={td}>
-                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${c.tipo === "Manual" ? "bg-warning/20 text-warning" : "bg-primary/10 text-primary"}`} title={c.tipo === "Manual" ? `Pago aplicado manual — ${c.transactionIds.length} pagos por s3_path` : "Pago automático (CUS)"}>{c.tipo}</span>
+                            <span className="mx-auto block max-w-[88px] truncate" title={c.periodo}>{c.periodo}</span>
                           </td>
                           <td className={`${tdNum} ${signClass(c.valorAch)}`}>{cop(c.valorAch)}</td>
                           <td className={`${tdNum} ${signClass(c.ingresoPlataforma)}`}>{cop(c.ingresoPlataforma)}</td>
@@ -200,7 +209,11 @@ export function PsePanel({
                             <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>{c.statusFactura}</span>
                           </td>
                           <td className={td}>
-                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${c.esParcial ? "bg-warning/20 text-warning" : "bg-success/15 text-success"}`}>{c.esParcial ? "Pago parcial" : "OK"}</span>
+                            {Math.round(c.diferencia) !== 0 ? (
+                              <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error" title="El cruce tiene diferencia — revisar/validar y anotar la observación">Validar</span>
+                            ) : (
+                              <span className={`rounded-md px-2 py-1 text-xs font-bold ${c.esParcial ? "bg-warning/20 text-warning" : "bg-success/15 text-success"}`}>{c.esParcial ? "Pago parcial" : "OK"}</span>
+                            )}
                           </td>
                           <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
                             <input
@@ -218,7 +231,7 @@ export function PsePanel({
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-line bg-surface font-bold">
-                      <td className={`${td} text-ink-soft`} colSpan={4}>Total</td>
+                      <td className={`${td} text-ink-soft`} colSpan={3}>Total</td>
                       <td className={`${tdNum} ${signClass(sumConcAch)}`}>{cop(sumConcAch)}</td>
                       <td className={`${tdNum} ${signClass(sumConcPlat)}`}>{cop(sumConcPlat)}</td>
                       <td className={td}></td>
