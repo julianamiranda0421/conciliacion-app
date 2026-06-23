@@ -15,13 +15,11 @@ export function PsePanel({
   period,
   accountId,
   observaciones,
-  pendienteObs,
 }: {
   result: PseResult;
   period: string;
   accountId: string;
-  observaciones: Record<string, string>;
-  pendienteObs: Record<string, string>; // clave "pse:<cus>"
+  observaciones: Record<string, string>; // clave "pse:<cus>" (conciliado y pendientes)
 }) {
   const r = result.resumen;
 
@@ -30,20 +28,12 @@ export function PsePanel({
   const [soloDif, setSoloDif] = useState(false); // filtrar solo cruces con diferencia
   const [bancoFil, setBancoFil] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
-  const [pendNotes, setPendNotes] = useState<Record<string, string>>(pendienteObs);
   const [drawer, setDrawer] = useState<PseConciliado | null>(null);
 
-  async function saveNote(transactionId: number, texto: string) {
-    if (!transactionId) return;
-    await fetch("/api/observations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ period, accountId, transactionId, texto }),
-    }).catch(() => {});
-  }
-
-  // Observación de una partida pendiente: se persiste por CUS (documento="pse:<cus>").
-  async function savePendNote(cus: string, texto: string) {
+  // Observación (conciliado o pendiente) persistida por CUS — clave estable que NO
+  // cambia al re-sincronizar bills_360 (a diferencia de transaction_id/id). Usa
+  // dev_observations con documento="pse:<cus>" vía /api/observations.
+  async function saveNote(cus: string, texto: string) {
     if (!cus) return;
     await fetch("/api/observations", {
       method: "POST",
@@ -217,9 +207,9 @@ export function PsePanel({
                           </td>
                           <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
                             <input
-                              value={notes[String(c.transactionId)] ?? ""}
-                              onChange={(e) => setNotes((n) => ({ ...n, [String(c.transactionId)]: e.target.value }))}
-                              onBlur={(e) => saveNote(c.transactionId, e.target.value)}
+                              value={notes[`pse:${c.cus}`] ?? ""}
+                              onChange={(e) => setNotes((n) => ({ ...n, [`pse:${c.cus}`]: e.target.value }))}
+                              onBlur={(e) => saveNote(c.cus, e.target.value)}
                               onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                               placeholder="—"
                               className="h-8 w-44 rounded-md border border-line px-2 text-xs"
@@ -284,9 +274,9 @@ export function PsePanel({
                         </td>
                         <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
                           <input
-                            value={pendNotes[`pse:${p.cus}`] ?? ""}
-                            onChange={(e) => setPendNotes((n) => ({ ...n, [`pse:${p.cus}`]: e.target.value }))}
-                            onBlur={(e) => savePendNote(p.cus, e.target.value)}
+                            value={notes[`pse:${p.cus}`] ?? ""}
+                            onChange={(e) => setNotes((n) => ({ ...n, [`pse:${p.cus}`]: e.target.value }))}
+                            onBlur={(e) => saveNote(p.cus, e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                             placeholder="Anota la partida…"
                             className="h-8 w-60 rounded-md border border-line px-2 text-xs"
