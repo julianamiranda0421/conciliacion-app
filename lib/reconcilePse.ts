@@ -213,10 +213,12 @@ export function reconcilePse(
   const sumaGrupo = (g: Txn[]) => g.reduce((s, t) => s + t.amount, 0);
   const disponible = (txns: Txn[]) => !txns.some((t) => consumed.has(t.transactionId));
 
-  // Pasada 2: por valor contra grupos s3 (ACH no enlazadas por CUS). Mayor primero.
+  // Pasada 2: por valor contra grupos s3 (ACH no enlazadas por CUS), match EXACTO (±$2).
+  // Solo se enlaza cuando la suma del grupo calza al peso con el valor del ACH. Si hay un
+  // gap (ej. ACH 4.548.273 vs grupo 4.528.417 de 82582+82662 = $19.856 por retenciones
+  // registradas en otro cruce), NO se fuerza el match con tolerancia: queda como PARTIDA
+  // conciliatoria pendiente para resolución/observación MANUAL (decisión usuaria 2026-06-22).
   const sinCus = aprobadas.filter((a) => !matchAuto.has(a)).sort((x, y) => y.valor - x.valor);
-
-  // 2a) EXACTO (±$2): consume primero los grupos cuya suma calza al peso.
   for (const a of sinCus) {
     for (const [, txns] of grupoS3) {
       if (!disponible(txns)) continue;
@@ -225,29 +227,6 @@ export function reconcilePse(
         for (const t of txns) consumed.add(t.transactionId);
         break;
       }
-    }
-  }
-  // 2b) CERCANO: para las que aún no enlazan, tomar el grupo s3 cuyo monto sea el MÁS
-  //     cercano dentro de una tolerancia (1% del valor, máx $100.000). Cubre diferencias
-  //     reales operador-vs-plataforma (comisión/ajuste) — ej. ACH 4.548.273 vs grupo
-  //     4.528.417 (facturas 82582+82662) = $19.856. La diferencia se MUESTRA (col Diferencia),
-  //     no se esconde. El tope evita falsos positivos en montos grandes.
-  for (const a of sinCus) {
-    if (matchManual.has(a)) continue;
-    const tol = Math.min(Math.max(MATCH_TOL, Math.round(a.valor * 0.01)), 100_000);
-    let best: Txn[] | null = null;
-    let bestDiff = Infinity;
-    for (const [, txns] of grupoS3) {
-      if (!disponible(txns)) continue;
-      const d = Math.abs(sumaGrupo(txns) - a.valor);
-      if (d <= tol && d < bestDiff) {
-        best = txns;
-        bestDiff = d;
-      }
-    }
-    if (best) {
-      matchManual.set(a, best);
-      for (const t of best) consumed.add(t.transactionId);
     }
   }
 

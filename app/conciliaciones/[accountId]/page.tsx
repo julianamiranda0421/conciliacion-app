@@ -103,11 +103,14 @@ function NoBankData({ period }: { period: string }) {
 // cruzan contra los depósitos "Recaudos Compras Pse" del extracto. El archivo PSE
 // ("Transacciones ACH") se usa como validación del gateway (detalle pagador/banco).
 async function PseSection({ accountId, period }: { accountId: string; period: string }) {
-  const [pseFile, banco, pseTxns, observaciones] = await Promise.all([
+  const [pseFile, banco, pseTxns, observaciones, pendienteObs] = await Promise.all([
     getPse(period),
     getBankMovements(period, accountId),
     getPseTransactions(period),
     getObservations(period, accountId),
+    // Observaciones de partidas PSE pendientes: clave por CUS (reusa dev_observations
+    // con documento = "pse:<cus>", para no chocar con documentos de cheques).
+    getDevObservations(period, accountId),
   ]);
   if (pseFile.length === 0 && pseTxns.length === 0) {
     return (
@@ -126,6 +129,7 @@ async function PseSection({ accountId, period }: { accountId: string; period: st
       period={period}
       accountId={accountId}
       observaciones={observaciones}
+      pendienteObs={pendienteObs}
     />
   );
 }

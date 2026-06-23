@@ -15,11 +15,13 @@ export function PsePanel({
   period,
   accountId,
   observaciones,
+  pendienteObs,
 }: {
   result: PseResult;
   period: string;
   accountId: string;
   observaciones: Record<string, string>;
+  pendienteObs: Record<string, string>; // clave "pse:<cus>"
 }) {
   const r = result.resumen;
 
@@ -27,6 +29,7 @@ export function PsePanel({
   const [fFactura, setFFactura] = useState("");
   const [bancoFil, setBancoFil] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>(observaciones);
+  const [pendNotes, setPendNotes] = useState<Record<string, string>>(pendienteObs);
   const [drawer, setDrawer] = useState<PseConciliado | null>(null);
 
   async function saveNote(transactionId: number, texto: string) {
@@ -35,6 +38,16 @@ export function PsePanel({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ period, accountId, transactionId, texto }),
+    }).catch(() => {});
+  }
+
+  // Observación de una partida pendiente: se persiste por CUS (documento="pse:<cus>").
+  async function savePendNote(cus: string, texto: string) {
+    if (!cus) return;
+    await fetch("/api/observations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ period, accountId, documento: `pse:${cus}`, texto }),
     }).catch(() => {});
   }
 
@@ -241,7 +254,7 @@ export function PsePanel({
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr>{["CUS", "Valor", "Fecha", "Banco originador", "Pagador (NIT/CC)", "Ciclo"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                    <tr>{["CUS", "Valor", "Fecha", "Banco originador", "Pagador (NIT/CC)", "Ciclo", "Observaciones"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
                     {pendientes.map((p, i) => (
@@ -256,6 +269,16 @@ export function PsePanel({
                             ? <span className="rounded-md bg-warning/20 px-2 py-1 text-xs font-bold text-warning">Otro ciclo</span>
                             : <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error">Sin pago</span>}
                         </td>
+                        <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
+                          <input
+                            value={pendNotes[`pse:${p.cus}`] ?? ""}
+                            onChange={(e) => setPendNotes((n) => ({ ...n, [`pse:${p.cus}`]: e.target.value }))}
+                            onBlur={(e) => savePendNote(p.cus, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                            placeholder="Anota la partida…"
+                            className="h-8 w-60 rounded-md border border-line px-2 text-xs"
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -263,7 +286,7 @@ export function PsePanel({
                     <tr className="border-t-2 border-line bg-surface font-bold">
                       <td className={`${td} text-ink-soft`}>Total</td>
                       <td className={`${tdNum} ${signClass(sumPend)}`}>{cop(sumPend)}</td>
-                      <td className={td} colSpan={4}></td>
+                      <td className={td} colSpan={5}></td>
                     </tr>
                   </tfoot>
                 </table>
