@@ -499,7 +499,10 @@ function FacturasDrawer({ conciliado, onClose }: { conciliado: PseConciliado; on
                         <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusOk ? "bg-success/15 text-success" : "bg-warning/20 text-warning"}`}>{f.statusFactura}</span>
                       </td>
                       <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
-                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${f.esParcial ? "bg-warning/20 text-warning" : "bg-success/15 text-success"}`}>{f.esParcial ? "Pago parcial" : "OK"}</span>
+                        {/* Pago por factura = según la diferencia REAL de ESTA factura (no el
+                            flag is_partial_payment del pago, que viene true para todas las
+                            filas del lote). dif 0 = este pago la cubrió completa. */}
+                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${dif !== 0 ? "bg-warning/20 text-warning" : "bg-success/15 text-success"}`}>{dif !== 0 ? "Pago parcial" : "OK"}</span>
                       </td>
                     </tr>
                   );

@@ -298,7 +298,9 @@ export function reconcilePse(
       ingresoPlataforma,
       biaCreditos,
       statusFactura: statuses.length === 1 ? statuses[0] : statuses.join(", ") || "SUCCESS",
-      esParcial: txns.some((t) => t.isPartial),
+      // "Parcial" = alguna factura quedó con diferencia REAL en este pago (aplicado<total),
+      // NO el flag is_partial_payment (viene true para todas las filas de un lote multi-pago).
+      esParcial: detalleFacturas.some((f) => Math.round(f.valorFactura - f.valorAplicado) !== 0),
       diferencia: a.valor - ingresoPlataforma,
       detalleFacturas,
     };
