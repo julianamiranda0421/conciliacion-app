@@ -261,16 +261,18 @@ export function PsePanel({
                   </thead>
                   <tbody>
                     {pendientes.map((p, i) => (
-                      <tr key={i} className={`hover:bg-primary-light/40 ${p.otroCiclo ? "bg-warning/5" : ""}`}>
-                        <td className={td}>{p.cus}</td>
+                      <tr key={i} className={`hover:bg-primary-light/40 ${p.fueraCorte ? "bg-primary-light/30" : p.otroCiclo ? "bg-warning/5" : ""}`}>
+                        <td className={td}>{p.fueraCorte ? "—" : p.cus}</td>
                         <td className={`${tdNum} ${signClass(p.valor)}`}>{cop(p.valor)}</td>
-                        <td className={td}>{fmtDate(p.fecha)}</td>
-                        <td className={td}>{p.bancoOriginador}</td>
+                        <td className={td}>{p.fueraCorte ? "—" : fmtDate(p.fecha)}</td>
+                        <td className={td}>{p.bancoOriginador || "—"}</td>
                         <td className={td}>{p.pagador}</td>
                         <td className={td}>
-                          {p.otroCiclo
-                            ? <span className="rounded-md bg-warning/20 px-2 py-1 text-xs font-bold text-warning">Otro ciclo</span>
-                            : <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error">Sin pago</span>}
+                          {p.fueraCorte
+                            ? <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">Fuera de corte</span>
+                            : p.otroCiclo
+                              ? <span className="rounded-md bg-warning/20 px-2 py-1 text-xs font-bold text-warning">Otro ciclo</span>
+                              : <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error">Sin pago</span>}
                         </td>
                         <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
                           <input

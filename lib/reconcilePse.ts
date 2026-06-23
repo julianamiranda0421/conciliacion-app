@@ -75,6 +75,7 @@ export type PsePendiente = {
   pagador: string;
   estado: string;
   otroCiclo: boolean;
+  fueraCorte?: boolean; // partida del lado BANCO (recaudo depositado fuera del corte del archivo ACH)
 };
 
 export type PseResumen = {
@@ -321,7 +322,6 @@ export function reconcilePse(
   }
 
   conciliado.sort((a, b) => (b.fechaAch || "").localeCompare(a.fechaAch || "") || b.valorAch - a.valorAch);
-  pendientes.sort((a, b) => b.valor - a.valor);
 
   // Banco: depósitos "Recaudos Compras Pse".
   const pseMov = banco.filter(esRecaudoPse);
@@ -330,6 +330,31 @@ export function reconcilePse(
   const achTotal = aprobadas.reduce((s, r) => s + r.valor, 0);
   const achOtroCiclo = aprobadas.filter((r) => esOtroCiclo(r.fecha)).reduce((s, r) => s + r.valor, 0);
   const achMes = achTotal - achOtroCiclo;
+
+  // PARTIDA CONCILIATORIA del lado BANCO: lo que está FUERA DEL CORTE del archivo ACH
+  // (decisión usuaria 2026-06-23). Si el banco depositó MÁS de lo que reporta el archivo
+  // ACH del mes, ese excedente es recaudo PSE de días aún no incluidos en el archivo
+  // (corte del banco posterior al del ACH) → se registra como partida conciliatoria.
+  // Caso inverso (ACH > banco): recaudo reportado aún sin depositar (en tránsito).
+  const difBancoAch = Math.round(bancoTotal - achMes);
+  if (Math.abs(difBancoAch) > 100_000) {
+    pendientes.push({
+      cus: "fuera-corte",
+      valor: Math.abs(difBancoAch),
+      fecha: "",
+      bancoOriginador: "",
+      pagador:
+        difBancoAch > 0
+          ? "Recaudo en banco fuera del corte del archivo ACH"
+          : "Recaudo PSE reportado sin depósito en banco (en tránsito)",
+      estado: "Partida conciliatoria",
+      otroCiclo: false,
+      fueraCorte: true,
+    });
+  }
+
+  pendientes.sort((a, b) => b.valor - a.valor);
+
   const valorConciliado = conciliado.reduce((s, c) => s + c.valorAch, 0);
   const valorPendiente = pendientes.reduce((s, p) => s + p.valor, 0);
   const nFacturas = conciliado.reduce((s, c) => s + c.facturas.length, 0);
