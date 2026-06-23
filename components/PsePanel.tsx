@@ -52,6 +52,10 @@ export function PsePanel({
     [result.conciliado, fFactura, soloDif],
   );
   const pendientes = result.pendientes;
+  // Partidas ACH (transacciones del archivo sin pago) vs partidas del lado banco
+  // (fuera de corte) — son de naturaleza distinta y se muestran por separado.
+  const pendAch = pendientes.filter((p) => !p.fueraCorte);
+  const pendFuera = pendientes.filter((p) => p.fueraCorte);
   const movimientos = result.movimientos;
 
   const bancos = useMemo(
@@ -91,7 +95,7 @@ export function PsePanel({
   const sumConcFact = conciliadas.reduce((s, c) => s + c.valorFactura, 0);
   const sumConcBia = conciliadas.reduce((s, c) => s + c.biaCreditos, 0);
   const sumConcPlat = conciliadas.reduce((s, c) => s + c.ingresoPlataforma, 0);
-  const sumPend = pendientes.reduce((s, p) => s + p.valor, 0);
+  const sumPendAch = pendAch.reduce((s, p) => s + p.valor, 0);
   const sumGw = gatewayFiltrado.reduce((s, g) => s + g.valor, 0);
 
   return (
@@ -241,16 +245,15 @@ export function PsePanel({
       {tab === "pend" && (
         <>
           <p className="mt-4 text-xs text-ink-soft">
-            Transacciones reportadas por el operador PSE en el archivo ACH que no tienen un pago
-            identificado en la plataforma (ni por CUS ni por grupo s3 de pago manual). Revisar:
-            pueden ser de otro ciclo o sin aplicar.
+            Transacciones del archivo ACH sin pago identificado en la plataforma (ni por CUS ni por
+            grupo s3 de pago manual) — pueden ser de otro ciclo o sin aplicar.
           </p>
           <div className="mt-2 flex items-center">
-            <span className="ml-auto text-sm text-ink-soft">{pendientes.length} filas · {cop(sumPend)}</span>
+            <span className="ml-auto text-sm text-ink-soft">{pendAch.length} filas · {cop(sumPendAch)}</span>
           </div>
-          {pendientes.length === 0 ? (
+          {pendAch.length === 0 ? (
             <div className="mt-2 rounded-xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-soft">
-              Sin partidas pendientes ✓
+              Sin partidas del archivo ACH ✓
             </div>
           ) : (
             <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
@@ -260,19 +263,17 @@ export function PsePanel({
                     <tr>{["CUS", "Valor", "Fecha", "Banco originador", "Pagador (NIT/CC)", "Ciclo", "Observaciones"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
-                    {pendientes.map((p, i) => (
-                      <tr key={i} className={`hover:bg-primary-light/40 ${p.fueraCorte ? "bg-primary-light/30" : p.otroCiclo ? "bg-warning/5" : ""}`}>
-                        <td className={td}>{p.fueraCorte ? "—" : p.cus}</td>
+                    {pendAch.map((p, i) => (
+                      <tr key={i} className={`hover:bg-primary-light/40 ${p.otroCiclo ? "bg-warning/5" : ""}`}>
+                        <td className={td}>{p.cus}</td>
                         <td className={`${tdNum} ${signClass(p.valor)}`}>{cop(p.valor)}</td>
-                        <td className={td}>{p.fueraCorte ? "—" : fmtDate(p.fecha)}</td>
+                        <td className={td}>{fmtDate(p.fecha)}</td>
                         <td className={td}>{p.bancoOriginador || "—"}</td>
                         <td className={td}>{p.pagador}</td>
                         <td className={td}>
-                          {p.fueraCorte
-                            ? <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">Fuera de corte</span>
-                            : p.otroCiclo
-                              ? <span className="rounded-md bg-warning/20 px-2 py-1 text-xs font-bold text-warning">Otro ciclo</span>
-                              : <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error">Sin pago</span>}
+                          {p.otroCiclo
+                            ? <span className="rounded-md bg-warning/20 px-2 py-1 text-xs font-bold text-warning">Otro ciclo</span>
+                            : <span className="rounded-md bg-error/15 px-2 py-1 text-xs font-bold text-error">Sin pago</span>}
                         </td>
                         <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
                           <input
@@ -290,13 +291,54 @@ export function PsePanel({
                   <tfoot>
                     <tr className="border-t-2 border-line bg-surface font-bold">
                       <td className={`${td} text-ink-soft`}>Total</td>
-                      <td className={`${tdNum} ${signClass(sumPend)}`}>{cop(sumPend)}</td>
+                      <td className={`${tdNum} ${signClass(sumPendAch)}`}>{cop(sumPendAch)}</td>
                       <td className={td} colSpan={5}></td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             </div>
+          )}
+
+          {/* Partidas del lado BANCO: recaudo fuera del corte del archivo ACH (otra naturaleza:
+              no son transacciones PSE con NIT, así que van en su propia tabla con Concepto). */}
+          {pendFuera.length > 0 && (
+            <>
+              <p className="mt-6 text-xs text-ink-soft">
+                Partida(s) del lado banco: recaudo PSE depositado que el archivo ACH del mes aún no
+                reporta (corte del banco posterior al del archivo). Cuadra al cargar el ACH del corte correspondiente.
+              </p>
+              <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>{["Concepto", "Valor", "Estado", "Observaciones"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {pendFuera.map((p, i) => (
+                        <tr key={i} className="bg-primary-light/30 hover:bg-primary-light/50">
+                          <td className={`${td} text-left`}>{p.pagador}</td>
+                          <td className={`${tdNum} ${signClass(p.valor)}`}>{cop(p.valor)}</td>
+                          <td className={td}>
+                            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">Fuera de corte</span>
+                          </td>
+                          <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm">
+                            <input
+                              value={notes[`pse:${p.cus}`] ?? ""}
+                              onChange={(e) => setNotes((n) => ({ ...n, [`pse:${p.cus}`]: e.target.value }))}
+                              onBlur={(e) => saveNote(p.cus, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                              placeholder="Anota la partida…"
+                              className="h-8 w-60 rounded-md border border-line px-2 text-xs"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </>
       )}
