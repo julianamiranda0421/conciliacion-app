@@ -260,21 +260,27 @@ export function reconcilePse(
     const valorFactura = allBills.reduce((s, b) => s + b.total, 0);
     const periodos = [...new Set(allBills.map((b) => b.period).filter(Boolean))] as string[];
     const statuses = [...new Set(allBills.map((b) => b.billStatus).filter(Boolean))] as string[];
-    // valorAplicado por factura = efectivo (ingresoPlataforma) repartido proporcional al total.
-    const sumTot = valorFactura || 1;
-    let resto = ingresoPlataforma;
-    const detalleFacturas: PseFacturaDetalle[] = allBills.map((b, i, arr) => {
-      const aplicado = i === arr.length - 1 ? resto : Math.round((ingresoPlataforma * b.total) / sumTot);
-      resto -= aplicado;
-      return {
-        billId: b.billId,
-        periodo: b.period ?? "—",
-        valorFactura: b.total,
-        valorAplicado: aplicado,
-        statusFactura: b.billStatus ?? "SUCCESS",
-        esParcial: b.isPartial,
-      };
-    });
+    // valorAplicado por factura = el monto REAL de SU transacción (no un reparto del total
+    // del grupo). En un grupo manual cada transacción paga su propia factura con su amount
+    // (ej. txn 569984 $7.035.400→87657, txn 569983 $3.226.965→84206). Si una transacción
+    // paga VARIAS facturas, su amount se reparte proporcional al total ENTRE ESAS facturas.
+    const detalleFacturas: PseFacturaDetalle[] = [];
+    for (const t of txns) {
+      const sumTotT = t.bills.reduce((s, b) => s + b.total, 0) || 1;
+      let resto = t.amount;
+      t.bills.forEach((b, i, arr) => {
+        const aplicado = i === arr.length - 1 ? resto : Math.round((t.amount * b.total) / sumTotT);
+        resto -= aplicado;
+        detalleFacturas.push({
+          billId: b.billId,
+          periodo: b.period ?? "—",
+          valorFactura: b.total,
+          valorAplicado: aplicado,
+          statusFactura: b.billStatus ?? "SUCCESS",
+          esParcial: b.isPartial,
+        });
+      });
+    }
     return {
       cus: String(a.cus ?? "").trim(),
       valorAch: a.valor,
