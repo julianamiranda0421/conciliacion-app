@@ -37,7 +37,17 @@ const num = (v: unknown): number => {
 export function parseAdquirencias(data: Uint8Array): Adquirencia[] {
   const wb = XLSX.read(data, { type: "array", cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Row>(sheet, { defval: null });
+  // DETECTAR la fila de encabezado: el export del adquirente a veces trae una fila de
+  // título arriba (ej. "Vale - Voucher - Ventas", hoja "ConsultaDetallada") y los
+  // encabezados reales en la 2a fila, y a veces no. Sin esto, sheet_to_json toma el
+  // título como encabezado y no encuentra "Valor Consumo" → 0 filas → "No se encontraron
+  // filas válidas". Se busca la fila que contiene "Valor Consumo" y se usa como header.
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
+  let headerIdx = matrix.findIndex(
+    (row) => Array.isArray(row) && row.some((c) => String(c ?? "").trim() === "Valor Consumo"),
+  );
+  if (headerIdx < 0) headerIdx = 0;
+  const rows = XLSX.utils.sheet_to_json<Row>(sheet, { defval: null, range: headerIdx });
 
   const out: Adquirencia[] = [];
   for (const r of rows) {
