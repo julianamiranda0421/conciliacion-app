@@ -71,7 +71,7 @@ export function PsePanel({
     { cls: "primary", lbl: "Ingreso 7772 (banco)", val: cop(r.bancoTotal), sub: `${movimientos.length} depósitos "Recaudos Compras Pse"` },
     { cls: diffOk ? "ok" : "bad", lbl: "Diferencia ACH vs 7772", val: cop(r.diffAchVsBanco), sub: diffOk ? "cuadra ✓" : "revisar (ciclo/timing)" },
     { cls: "ok", lbl: "Conciliado a factura", val: cop(r.valorConciliado), sub: `${r.nConciliado} tx (${r.nManual} manual) · ${r.nFacturas} facturas` },
-    { cls: r.nPendiente > 0 ? "warn" : "ok", lbl: "Pendiente (sin pago plataforma)", val: cop(r.valorPendiente), sub: `${r.nPendiente} tx del ACH sin pago` },
+    { cls: r.nPendiente > 0 ? "warn" : "ok", lbl: "Partidas conciliatorias", val: cop(r.valorPendiente), sub: `${r.nPendiente} partida(s) (sin pago / fuera de corte)` },
     { cls: "ok", lbl: "Conciliado", val: `${r.pctConciliado}%`, sub: "Conciliado a factura / Archivo ACH", bar: r.pctConciliado },
   ];
 
