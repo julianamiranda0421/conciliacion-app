@@ -92,8 +92,8 @@ function NoBankData({ period }: { period: string }) {
     <div className="rounded-xl border border-line bg-white px-6 py-16 text-center shadow-sm">
       <div className="text-sm font-medium">Aún no hay conciliación para {period}</div>
       <p className="mt-1 text-sm text-ink-soft">
-        Ve a <b>Cargas → Nueva carga</b>, sube el extracto de esta cuenta y se conciliará
-        contra los pagos sincronizados desde Metabase.
+        Ve a <b>Conciliaciones</b> y usa el botón <b>Cargar extracto bancario</b>, sube el
+        extracto de esta cuenta y se conciliará contra los pagos sincronizados desde Cartera 360.
       </p>
     </div>
   );
@@ -115,8 +115,8 @@ async function PseSection({ accountId, period }: { accountId: string; period: st
     return (
       <div className="rounded-xl border border-dashed border-line bg-white px-6 py-10 text-center text-sm text-ink-soft">
         Aún no has cargado el archivo de PSE para {period}. Cárgalo desde{" "}
-        <Link href="/cargas/nueva" className="font-medium text-primary hover:underline">
-          Cargas → Nueva carga → PSE
+        <Link href="/conciliaciones" className="font-medium text-primary hover:underline">
+          Conciliaciones → Cargar extracto bancario → Transacciones ACH (PSE)
         </Link>{" "}
         para ver el recaudo PSE.
       </div>
@@ -159,8 +159,8 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
       ) : (
         <div className="rounded-xl border border-dashed border-line bg-white px-6 py-10 text-center text-sm text-ink-soft">
           Aún no has cargado el archivo de adquirencias para {period}. Cárgalo desde{" "}
-          <Link href="/cargas/nueva" className="font-medium text-primary hover:underline">
-            Cargas → Nueva carga → Adquirencias
+          <Link href="/conciliaciones" className="font-medium text-primary hover:underline">
+            Conciliaciones → Cargar extracto bancario → Adquirencias
           </Link>{" "}
           para conciliar el recaudo por tarjeta de crédito.
         </div>

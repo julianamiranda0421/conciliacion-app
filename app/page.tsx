@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Upload, Scale, ArrowRight } from "lucide-react";
+import { Wallet, Scale, ArrowRight } from "lucide-react";
 import { BANK_ACCOUNTS } from "@/lib/banks";
 
 export default function Home() {
@@ -21,18 +21,18 @@ export default function Home() {
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         <ModuleCard
-          href="/cargas/nueva"
-          icon={<Upload className="h-5 w-5" />}
-          title="Cargar archivos"
-          desc="Sube el extracto del banco (PDF) y la base de transactions del mes para cada cuenta."
-          cta="Nueva carga"
-        />
-        <ModuleCard
           href="/conciliaciones"
           icon={<Scale className="h-5 w-5" />}
-          title="Conciliar"
-          desc="Selecciona la cuenta y el período para ejecutar la conciliación y ver el resultado."
+          title="Conciliaciones"
+          desc="Carga el extracto del banco, adquirencias o PSE y concilia cada cuenta contra los pagos del período."
           cta="Ir a conciliaciones"
+        />
+        <ModuleCard
+          href="/cartera"
+          icon={<Wallet className="h-5 w-5" />}
+          title="Cartera 360"
+          desc="Consulta los pagos sincronizados desde Metabase que alimentan la conciliación."
+          cta="Ir a cartera 360"
         />
       </div>
     </div>
