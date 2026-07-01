@@ -609,6 +609,20 @@ export async function getBankTotalsByAccount(period: string): Promise<AccountTot
   }
 }
 
+// Todos los cierres de un período (saldo inicial/ingresos/egresos/saldo final +
+// estado de aprobación), para la tabla de cuentas del dashboard.
+export async function getClosingsByPeriod(period: string): Promise<ClosingRow[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from("recon_closing").select("*").eq("period", period);
+    if (error) throw error;
+    return (data ?? []) as ClosingRow[];
+  } catch (e) {
+    console.warn("getClosingsByPeriod omitido:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
 export type WeekTotals = { label: string; ingresos: number; egresos: number };
 
 // Ingresos/egresos por SEMANA del mes (S1 = días 1-7, S2 = 8-14, ...), sumando todas

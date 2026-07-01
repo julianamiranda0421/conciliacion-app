@@ -1,16 +1,17 @@
+import Link from "next/link";
 import {
   TrendingUp, TrendingDown, Percent,
-  Receipt, FileText, Clock, CheckCircle2,
+  Receipt, FileText, Clock, CheckCircle2, Landmark, Eye,
 } from "lucide-react";
 import {
   listBankPeriods,
   getBankTotalsByPeriod,
-  getBankTotalsByAccount,
+  getClosingsByPeriod,
   getBankTotalsByWeek,
   getCartera,
   getCajaConciliada,
 } from "@/lib/db";
-import { MONTHS, accountLabel } from "@/lib/banks";
+import { MONTHS, accountLabel, CONCILIABLE_ACCOUNTS } from "@/lib/banks";
 import { money, moneyShort } from "@/lib/format";
 import { DashboardPeriodSelect } from "@/components/DashboardPeriodSelect";
 import { IngresosEgresosChart, type SeriesPoint } from "@/components/IngresosEgresosChart";
@@ -60,16 +61,17 @@ export default async function Home({
   const currentMonthPeriod = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
   const selected = periodParam || bankPeriods[0] || currentMonthPeriod;
 
-  const [byPeriod, byAccount, weekly, cartera, caja] = await Promise.all([
+  const [byPeriod, closings, weekly, cartera, caja] = await Promise.all([
     getBankTotalsByPeriod(),
-    getBankTotalsByAccount(selected),
+    getClosingsByPeriod(selected),
     getBankTotalsByWeek(selected),
     getCartera(toBillPeriod(selected)),
     getCajaConciliada(selected),
   ]);
 
-  const totalIngresos = byAccount.reduce((s, a) => s + a.ingresos, 0);
-  const totalEgresos = byAccount.reduce((s, a) => s + a.egresos, 0);
+  const closingMap = new Map(closings.map((c) => [c.account_id, c]));
+  const totalIngresos = closings.reduce((s, c) => s + (c.ingresos ?? 0), 0);
+  const totalEgresos = closings.reduce((s, c) => s + (c.egresos ?? 0), 0);
   const recaudoConc = caja.ingresoBanco; // recaudo conciliado (crossings)
   const pctRecaudo = totalIngresos > 0 ? Math.min(100, Math.round((recaudoConc / totalIngresos) * 100)) : 0;
   const pctPagado = cartera.valorFacturado
@@ -90,7 +92,6 @@ export default async function Home({
     ingresos: w.ingresos,
     egresos: w.egresos,
   }));
-  const maxAcc = Math.max(1, ...byAccount.map((a) => a.ingresos));
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -118,45 +119,104 @@ export default async function Home({
         <IngresosEgresosChart monthly={monthly} weekly={weeklySeries} />
       </div>
 
-      {/* Cartera + Ingresos por cuenta */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-bold">Cartera 360 — {selected}</h2>
-          <p className="mt-0.5 text-xs text-ink-soft">Estado de facturas del período.</p>
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <Mini icon={<FileText className="h-4 w-4 text-primary" />} label="Total facturado" value={money(cartera.valorFacturado)} />
-            <Mini icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Valor pagado" value={money(cartera.pagado)} />
-            <Mini icon={<Clock className="h-4 w-4 text-warning" />} label="Pendiente de pago" value={money(cartera.valorPendiente)} />
-            <Mini icon={<Receipt className="h-4 w-4 text-primary" />} label="Recaudo conciliado" value={money(recaudoConc)} />
-          </div>
+      {/* Tabla de cuentas bancarias: saldos + estado de conciliación */}
+      <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold">Cuentas bancarias — {selected}</h2>
+        <p className="mt-0.5 text-xs text-ink-soft">Saldos del mes y estado de conciliación por cuenta.</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                {[
+                  ["Cuenta bancaria", "text-left"],
+                  ["Saldo inicial", "text-right"],
+                  ["Ingresos", "text-right"],
+                  ["Egresos", "text-right"],
+                  ["Saldo actual", "text-right"],
+                  ["Conciliación", "text-center"],
+                ].map(([h, align]) => (
+                  <th key={h} className={`whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-[11px] uppercase tracking-wide text-ink-soft ${align}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {CONCILIABLE_ACCOUNTS.filter((a) => a.enabled).map((a) => {
+                const c = closingMap.get(a.id);
+                const ingresos = c?.ingresos ?? 0;
+                const egresos = c?.egresos ?? 0;
+                const saldoIni = c?.saldo_inicial ?? null;
+                const saldoAct = (saldoIni ?? 0) + ingresos - egresos;
+                const estado = c?.aprobado ? "aprobada" : c ? "parcial" : "sin";
+                return (
+                  <tr key={a.id} className="hover:bg-primary-light/30">
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-primary">
+                          <Landmark className="h-4 w-4" />
+                        </span>
+                        <span className="font-medium">{accountLabel(a.id)}</span>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums text-ink-soft">
+                      {saldoIni != null ? money(saldoIni) : "—"}
+                    </td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums">{money(ingresos)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums">{money(egresos)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right font-semibold tabular-nums">{money(saldoAct)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <EstadoBadge estado={estado} />
+                        <Link
+                          href={`/conciliaciones/${a.id}?period=${encodeURIComponent(selected)}`}
+                          title="Ver conciliación"
+                          className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface hover:text-primary"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-bold">Ingresos por cuenta — {selected}</h2>
-          <p className="mt-0.5 text-xs text-ink-soft">Cuánto aportó cada cuenta al ingreso del mes.</p>
-          {byAccount.length === 0 ? (
-            <div className="mt-6 flex h-40 items-center justify-center text-sm text-ink-soft">
-              Sin datos del período. Carga los extractos en Conciliaciones.
-            </div>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {byAccount.map((a) => (
-                <div key={a.accountId} className="flex items-center gap-3">
-                  <span className="w-32 shrink-0 truncate text-sm" title={accountLabel(a.accountId)}>
-                    {accountLabel(a.accountId)}
-                  </span>
-                  <div className="h-3 flex-1 overflow-hidden rounded bg-line">
-                    <div className="h-full rounded bg-success" style={{ width: `${(a.ingresos / maxAcc) * 100}%` }} />
-                  </div>
-                  <span className="w-24 shrink-0 text-right text-sm font-medium tabular-nums">{moneyShort(a.ingresos)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Cartera 360 del período */}
+      <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold">Cartera 360 — {selected}</h2>
+        <p className="mt-0.5 text-xs text-ink-soft">Estado de facturas del período.</p>
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Mini icon={<FileText className="h-4 w-4 text-primary" />} label="Total facturado" value={money(cartera.valorFacturado)} />
+          <Mini icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Valor pagado" value={money(cartera.pagado)} />
+          <Mini icon={<Clock className="h-4 w-4 text-warning" />} label="Pendiente de pago" value={money(cartera.valorPendiente)} />
+          <Mini icon={<Receipt className="h-4 w-4 text-primary" />} label="Recaudo conciliado" value={money(recaudoConc)} />
         </div>
       </div>
     </div>
   );
+}
+
+function EstadoBadge({ estado }: { estado: string }) {
+  if (estado === "aprobada") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-semibold text-success">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Aprobada
+      </span>
+    );
+  }
+  if (estado === "parcial") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-warning/20 px-2.5 py-1 text-xs font-semibold text-warning">
+        Parcial
+      </span>
+    );
+  }
+  return <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft">Sin datos</span>;
 }
 
 const TONE: Record<string, string> = {
