@@ -35,6 +35,20 @@ function toBillPeriod(p: string): string | undefined {
   return idx >= 0 && year ? `${idx + 1}-${year}` : undefined;
 }
 
+// Rangos de fecha por semana del mes: ["1–7 de mayo", "8–14 de mayo", ...].
+function weekRanges(period: string, weekCount: number): string[] {
+  const parts = period.trim().split(/\s+/);
+  const idx = MONTHS.findIndex((m) => m.toLowerCase() === parts[0]?.toLowerCase());
+  const year = Number(parts[1]);
+  const mesLower = idx >= 0 ? MONTHS[idx].toLowerCase() : "";
+  const days = idx >= 0 && year ? new Date(year, idx + 1, 0).getDate() : 31;
+  return Array.from({ length: weekCount }, (_, i) => {
+    const start = i * 7 + 1;
+    const end = Math.min((i + 1) * 7, days);
+    return `${start}–${end} de ${mesLower}`;
+  });
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -64,11 +78,18 @@ export default async function Home({
 
   const monthly: SeriesPoint[] = byPeriod.slice(-12).map((d) => ({
     label: shortPeriod(d.period),
+    sub: d.period,
     ingresos: d.ingresos,
     egresos: d.egresos,
     highlight: d.period === selected,
   }));
-  const weeklySeries: SeriesPoint[] = weekly.map((w) => ({ label: w.label, ingresos: w.ingresos, egresos: w.egresos }));
+  const ranges = weekRanges(selected, weekly.length);
+  const weeklySeries: SeriesPoint[] = weekly.map((w, i) => ({
+    label: w.label,
+    sub: ranges[i],
+    ingresos: w.ingresos,
+    egresos: w.egresos,
+  }));
   const maxAcc = Math.max(1, ...byAccount.map((a) => a.ingresos));
 
   return (

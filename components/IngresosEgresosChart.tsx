@@ -5,7 +5,7 @@ import { money, moneyShort } from "@/lib/format";
 
 // Gráfico de CURVA Ingresos vs Egresos con toggle Mes / Semana. SVG propio, paleta bia
 // (morado = ingresos, azul = egresos; sin rojo/verde).
-export type SeriesPoint = { label: string; ingresos: number; egresos: number; highlight?: boolean };
+export type SeriesPoint = { label: string; sub?: string; ingresos: number; egresos: number; highlight?: boolean };
 
 const INGRESOS = "#5B3DF5"; // primary
 const EGRESOS = "#0A84FF"; // info
@@ -46,6 +46,7 @@ export function IngresosEgresosChart({
   defaultMode?: "mes" | "semana";
 }) {
   const [mode, setMode] = useState<"mes" | "semana">(defaultMode);
+  const [hover, setHover] = useState<number | null>(null);
   const data = mode === "mes" ? monthly : weekly;
   const n = data.length;
   const max = Math.max(1, ...data.map((d) => Math.max(d.ingresos, d.egresos)));
@@ -81,7 +82,7 @@ export function IngresosEgresosChart({
             {(["mes", "semana"] as const).map((m) => (
               <button
                 key={m}
-                onClick={() => setMode(m)}
+                onClick={() => { setMode(m); setHover(null); }}
                 className={`rounded-full px-3 py-1 capitalize transition ${
                   mode === m ? "bg-primary text-white" : "text-ink-soft hover:text-ink"
                 }`}
@@ -98,7 +99,12 @@ export function IngresosEgresosChart({
           Aún no hay datos {mode === "mes" ? "de meses" : "de este mes"} para graficar.
         </div>
       ) : (
-        <svg viewBox={`0 0 ${W} ${H}`} className="mt-4 h-auto w-full" preserveAspectRatio="xMidYMid meet">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="mt-4 h-auto w-full"
+          preserveAspectRatio="xMidYMid meet"
+          onMouseLeave={() => setHover(null)}
+        >
           <defs>
             <linearGradient id="ingArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={INGRESOS} stopOpacity="0.18" />
@@ -123,22 +129,30 @@ export function IngresosEgresosChart({
 
           {/* Puntos */}
           {egrPts.map((p, i) => (
-            <circle key={`e${i}`} cx={p.x} cy={p.y} r="3" fill="white" stroke={EGRESOS} strokeWidth="2">
-              <title>{`${data[i].label} · Egresos ${money(data[i].egresos)}`}</title>
-            </circle>
+            <circle key={`e${i}`} cx={p.x} cy={p.y} r={hover === i ? 5 : 3} fill="white" stroke={EGRESOS} strokeWidth="2" />
           ))}
           {ingPts.map((p, i) => (
             <circle
               key={`i${i}`}
               cx={p.x}
               cy={p.y}
-              r={data[i].highlight ? "5" : "3.5"}
-              fill={data[i].highlight ? INGRESOS : "white"}
+              r={hover === i || data[i].highlight ? 5 : 3.5}
+              fill={data[i].highlight || hover === i ? INGRESOS : "white"}
               stroke={INGRESOS}
               strokeWidth="2"
-            >
-              <title>{`${data[i].label} · Ingresos ${money(data[i].ingresos)}`}</title>
-            </circle>
+            />
+          ))}
+
+          {/* Etiquetas de valor sobre los puntos */}
+          {data.map((d, i) => (
+            <text key={`vi${i}`} x={ingPts[i].x} y={Math.max(11, ingPts[i].y - 9)} textAnchor="middle" fontSize="9" fontWeight="600" fill={INGRESOS}>
+              {moneyShort(d.ingresos)}
+            </text>
+          ))}
+          {data.map((d, i) => (
+            <text key={`ve${i}`} x={egrPts[i].x} y={Math.min(baseY - 3, egrPts[i].y + 14)} textAnchor="middle" fontSize="9" fill={EGRESOS}>
+              {moneyShort(d.egresos)}
+            </text>
           ))}
 
           {/* Etiquetas del eje X */}
@@ -155,6 +169,41 @@ export function IngresosEgresosChart({
               {d.label}
             </text>
           ))}
+
+          {/* Guía vertical + tooltip al pasar el cursor */}
+          {hover != null && hover < n && (() => {
+            const TW = 200;
+            const TH = 60;
+            const topY = Math.min(ingPts[hover].y, egrPts[hover].y);
+            const tx = Math.max(PAD.l, Math.min(x(hover) - TW / 2, W - PAD.r - TW));
+            const ty = Math.max(2, topY - TH - 12);
+            const title = data[hover].sub ?? data[hover].label;
+            return (
+              <g pointerEvents="none">
+                <line x1={x(hover)} y1={PAD.t} x2={x(hover)} y2={baseY} stroke="#5C5C70" strokeWidth="1" strokeDasharray="3 3" opacity="0.35" />
+                <rect x={tx} y={ty} width={TW} height={TH} rx="8" fill="white" stroke="#E5E7EB" />
+                <text x={tx + 12} y={ty + 18} fontSize="11" fontWeight="700" fill="#1E1E1E">{title}</text>
+                <text x={tx + 12} y={ty + 35} fontSize="11" fill={INGRESOS}>{`Ingresos  ${money(data[hover].ingresos)}`}</text>
+                <text x={tx + 12} y={ty + 51} fontSize="11" fill={EGRESOS}>{`Egresos  ${money(data[hover].egresos)}`}</text>
+              </g>
+            );
+          })()}
+
+          {/* Bandas invisibles por columna: activan el tooltip al pasar el cursor */}
+          {data.map((d, i) => {
+            const band = n <= 1 ? innerW : innerW / (n - 1);
+            return (
+              <rect
+                key={`h${i}`}
+                x={x(i) - band / 2}
+                y={PAD.t}
+                width={band}
+                height={innerH}
+                fill="transparent"
+                onMouseEnter={() => setHover(i)}
+              />
+            );
+          })}
         </svg>
       )}
     </div>
