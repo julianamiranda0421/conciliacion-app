@@ -1,7 +1,7 @@
 // Capa de acceso a datos sobre Supabase. Solo servidor.
 
 import { getSupabase } from "./supabase";
-import { accountLabel } from "./banks";
+import { accountLabel, CONCILIABLE_ACCOUNTS } from "./banks";
 import type { TxnRow } from "./parseTransactions";
 import type { BankMovement } from "./parseBank";
 import type { Conciliado } from "./reconcile";
@@ -562,6 +562,74 @@ export async function getMovementBills(
     console.warn("getMovementBills omitido:", e instanceof Error ? e.message : e);
     return [];
   }
+}
+
+// ---- Agregados para el dashboard gerencial (Inicio) ----
+// Fuente principal: recon_closing (totales declarados/guardados por cuenta y mes al
+// cargar cada extracto). Tabla pequeña (1 fila por cuenta×período) → consultas rápidas.
+export type PeriodTotals = { period: string; ingresos: number; egresos: number };
+
+// Ingresos/egresos por período (mes), sumando todas las cuentas. Orden cronológico.
+export async function getBankTotalsByPeriod(): Promise<PeriodTotals[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from("recon_closing").select("period,ingresos,egresos");
+    if (error) throw error;
+    const map = new Map<string, PeriodTotals>();
+    for (const r of (data ?? []) as { period: string; ingresos: number | null; egresos: number | null }[]) {
+      const e = map.get(r.period) ?? { period: r.period, ingresos: 0, egresos: 0 };
+      e.ingresos += Number(r.ingresos) || 0;
+      e.egresos += Number(r.egresos) || 0;
+      map.set(r.period, e);
+    }
+    return [...map.values()].sort((a, b) => bankPeriodKey(a.period) - bankPeriodKey(b.period));
+  } catch (e) {
+    console.warn("getBankTotalsByPeriod omitido:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+export type AccountTotals = { accountId: string; ingresos: number; egresos: number };
+
+// Ingresos/egresos por cuenta para un período (para el ranking por cuenta).
+export async function getBankTotalsByAccount(period: string): Promise<AccountTotals[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("recon_closing")
+      .select("account_id,ingresos,egresos")
+      .eq("period", period);
+    if (error) throw error;
+    return ((data ?? []) as { account_id: string; ingresos: number | null; egresos: number | null }[])
+      .map((r) => ({ accountId: r.account_id, ingresos: Number(r.ingresos) || 0, egresos: Number(r.egresos) || 0 }))
+      .sort((a, b) => b.ingresos - a.ingresos);
+  } catch (e) {
+    console.warn("getBankTotalsByAccount omitido:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+export type WeekTotals = { label: string; ingresos: number; egresos: number };
+
+// Ingresos/egresos por SEMANA del mes (S1 = días 1-7, S2 = 8-14, ...), sumando todas
+// las cuentas del período. Fuente: bank_movements (granularidad intra-mes).
+export async function getBankTotalsByWeek(period: string): Promise<WeekTotals[]> {
+  const buckets: WeekTotals[] = [1, 2, 3, 4, 5].map((n) => ({ label: `Sem ${n}`, ingresos: 0, egresos: 0 }));
+  for (const a of CONCILIABLE_ACCOUNTS.filter((x) => x.enabled)) {
+    const movs = await getBankMovements(period, a.id);
+    for (const m of movs) {
+      const dd = m.fecha.match(/^\d{4}-\d{2}-(\d{2})/);
+      const day = dd ? Number(dd[1]) : 0;
+      if (!day) continue;
+      const idx = Math.min(4, Math.floor((day - 1) / 7));
+      if (m.valor > 0) buckets[idx].ingresos += m.valor;
+      else if (m.valor < 0) buckets[idx].egresos += -m.valor;
+    }
+  }
+  // Recortar semanas vacías al final (ej. Sem 5 si el mes no la alcanza).
+  let last = buckets.length - 1;
+  while (last > 0 && buckets[last].ingresos === 0 && buckets[last].egresos === 0) last--;
+  return buckets.slice(0, last + 1);
 }
 
 // ---- Clasificación manual de movimientos (marcar ingreso como recaudo) ----

@@ -14,6 +14,7 @@ import {
   recordLoad,
   enrichConciliado,
   saveClosing,
+  getClosing,
   getMovementBills,
   saveMovementBills,
 } from "@/lib/db";
@@ -207,25 +208,25 @@ export async function POST(req: Request) {
       rowCount: banco.length,
     });
 
-    // Autollenado del saldo inicial desde el estado de cuenta (SALDO ANTERIOR). El
-    // usuario lo puede ajustar luego. Defensivo: si la tabla recon_closing aún no
-    // existe, no rompe la carga (el cierre simplemente queda sin prellenar).
-    if (saldoAnterior != null) {
-      try {
-        // Preferir los totales DECLARADOS en el encabezado del extracto (más robustos
-        // que sumar los movimientos, que puede variar por layout); si no vienen, sumar.
-        const totals = computeMovTotals(banco);
-        const ingresos = headerIngresos ?? totals.ingresos;
-        const egresos = headerEgresos ?? totals.egresos;
-        await saveClosing(periodo, accountId, {
-          saldoInicial: saldoAnterior,
-          ingresos,
-          egresos,
-          saldoFinal: headerSaldoFinal ?? saldoActual(saldoAnterior, { ingresos, egresos }),
-        });
-      } catch (e) {
-        console.warn("Autollenado de saldo inicial omitido:", e instanceof Error ? e.message : e);
-      }
+    // Guardar los totales del mes en el cierre (alimenta las tarjetas de saldos y el
+    // dashboard). Ingresos/egresos: del encabezado del extracto si viene, si no se
+    // suman los movimientos. Saldo inicial: se autollena del extracto (SALDO ANTERIOR)
+    // y, si el archivo no lo trae (Excel/CORTE), se conserva el que ya hubiera (no se
+    // pisa un valor digitado a mano). Defensivo: si recon_closing no existe, no rompe.
+    try {
+      const totals = computeMovTotals(banco);
+      const ingresos = headerIngresos ?? totals.ingresos;
+      const egresos = headerEgresos ?? totals.egresos;
+      const existing = await getClosing(periodo, accountId);
+      const saldoIni = saldoAnterior ?? existing?.saldo_inicial ?? null;
+      await saveClosing(periodo, accountId, {
+        saldoInicial: saldoIni,
+        ingresos,
+        egresos,
+        saldoFinal: saldoIni != null ? saldoActual(saldoIni, { ingresos, egresos }) : headerSaldoFinal ?? null,
+      });
+    } catch (e) {
+      console.warn("Guardado de totales del cierre omitido:", e instanceof Error ? e.message : e);
     }
 
     // Enriquecer el conciliado (período/valor/status de factura) para el preview.
