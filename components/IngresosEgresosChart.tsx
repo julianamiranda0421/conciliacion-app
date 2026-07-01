@@ -3,9 +3,38 @@
 import { useState } from "react";
 import { money, moneyShort } from "@/lib/format";
 
-// Gráfico de barras Ingresos vs Egresos con toggle Mes / Semana. SVG/CSS propio
-// (sin librerías). Cada punto muestra dos barras: ingresos (verde) y egresos (rojo).
+// Gráfico de CURVA Ingresos vs Egresos con toggle Mes / Semana. SVG propio, paleta bia
+// (morado = ingresos, azul = egresos; sin rojo/verde).
 export type SeriesPoint = { label: string; ingresos: number; egresos: number; highlight?: boolean };
+
+const INGRESOS = "#5B3DF5"; // primary
+const EGRESOS = "#0A84FF"; // info
+
+// Lienzo (viewBox); el SVG escala al ancho del contenedor.
+const W = 820;
+const H = 280;
+const PAD = { l: 64, r: 20, t: 20, b: 34 };
+
+type P = { x: number; y: number };
+
+// Curva suave (Catmull-Rom → Bézier cúbica) que pasa por todos los puntos.
+function smoothPath(pts: P[]): string {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
 
 export function IngresosEgresosChart({
   monthly,
@@ -18,7 +47,21 @@ export function IngresosEgresosChart({
 }) {
   const [mode, setMode] = useState<"mes" | "semana">(defaultMode);
   const data = mode === "mes" ? monthly : weekly;
+  const n = data.length;
   const max = Math.max(1, ...data.map((d) => Math.max(d.ingresos, d.egresos)));
+
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+  const baseY = PAD.t + innerH;
+  const x = (i: number) => (n <= 1 ? PAD.l + innerW / 2 : PAD.l + (i / (n - 1)) * innerW);
+  const y = (v: number) => PAD.t + innerH - (v / max) * innerH;
+
+  const ingPts: P[] = data.map((d, i) => ({ x: x(i), y: y(d.ingresos) }));
+  const egrPts: P[] = data.map((d, i) => ({ x: x(i), y: y(d.egresos) }));
+  const ingPath = smoothPath(ingPts);
+  const egrPath = smoothPath(egrPts);
+  const areaPath = ingPts.length >= 2 ? `${ingPath} L ${ingPts[n - 1].x} ${baseY} L ${ingPts[0].x} ${baseY} Z` : "";
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => ({ v: max * t, y: y(max * t) }));
 
   return (
     <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
@@ -30,12 +73,10 @@ export function IngresosEgresosChart({
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Leyenda */}
           <div className="flex items-center gap-3 text-xs text-ink-soft">
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success" /> Ingresos</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-error/70" /> Egresos</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: INGRESOS }} /> Ingresos</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: EGRESOS }} /> Egresos</span>
           </div>
-          {/* Toggle Mes / Semana */}
           <div className="inline-flex rounded-full border border-line p-0.5 text-xs font-medium">
             {(["mes", "semana"] as const).map((m) => (
               <button
@@ -52,41 +93,70 @@ export function IngresosEgresosChart({
         </div>
       </div>
 
-      {data.length === 0 ? (
+      {n === 0 ? (
         <div className="mt-6 flex h-56 items-center justify-center rounded-lg border border-dashed border-line text-sm text-ink-soft">
           Aún no hay datos {mode === "mes" ? "de meses" : "de este mes"} para graficar.
         </div>
       ) : (
-        <div className="mt-6 flex h-64 items-end gap-3 border-b border-line pb-0">
-          {data.map((d, i) => (
-            <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
-              <div className="flex w-full items-end justify-center gap-1" style={{ height: "100%" }}>
-                <Bar valor={d.ingresos} max={max} className="bg-success" />
-                <Bar valor={d.egresos} max={max} className="bg-error/70" />
-              </div>
-              <span
-                className={`max-w-full truncate text-[11px] ${d.highlight ? "font-bold text-primary" : "text-ink-soft"}`}
-                title={d.label}
-              >
-                {d.label}
-              </span>
-            </div>
+        <svg viewBox={`0 0 ${W} ${H}`} className="mt-4 h-auto w-full" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="ingArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={INGRESOS} stopOpacity="0.18" />
+              <stop offset="100%" stopColor={INGRESOS} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Grilla + etiquetas del eje Y */}
+          {ticks.map((t, i) => (
+            <g key={i}>
+              <line x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y} stroke="#E5E7EB" strokeWidth="1" />
+              <text x={PAD.l - 8} y={t.y + 3} textAnchor="end" fontSize="10" fill="#5C5C70">
+                {moneyShort(t.v)}
+              </text>
+            </g>
           ))}
-        </div>
+
+          {/* Área bajo ingresos + curvas */}
+          {areaPath && <path d={areaPath} fill="url(#ingArea)" />}
+          <path d={egrPath} fill="none" stroke={EGRESOS} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={ingPath} fill="none" stroke={INGRESOS} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+          {/* Puntos */}
+          {egrPts.map((p, i) => (
+            <circle key={`e${i}`} cx={p.x} cy={p.y} r="3" fill="white" stroke={EGRESOS} strokeWidth="2">
+              <title>{`${data[i].label} · Egresos ${money(data[i].egresos)}`}</title>
+            </circle>
+          ))}
+          {ingPts.map((p, i) => (
+            <circle
+              key={`i${i}`}
+              cx={p.x}
+              cy={p.y}
+              r={data[i].highlight ? "5" : "3.5"}
+              fill={data[i].highlight ? INGRESOS : "white"}
+              stroke={INGRESOS}
+              strokeWidth="2"
+            >
+              <title>{`${data[i].label} · Ingresos ${money(data[i].ingresos)}`}</title>
+            </circle>
+          ))}
+
+          {/* Etiquetas del eje X */}
+          {data.map((d, i) => (
+            <text
+              key={`x${i}`}
+              x={x(i)}
+              y={H - 12}
+              textAnchor="middle"
+              fontSize="10"
+              fontWeight={d.highlight ? 700 : 400}
+              fill={d.highlight ? INGRESOS : "#5C5C70"}
+            >
+              {d.label}
+            </text>
+          ))}
+        </svg>
       )}
     </div>
-  );
-}
-
-function Bar({ valor, max, className }: { valor: number; max: number; className: string }) {
-  // Altura mínima visible de 2px cuando hay valor, para no “desaparecer” montos chicos.
-  const pct = max > 0 ? (valor / max) * 100 : 0;
-  const h = valor > 0 ? `max(2px, ${pct}%)` : "0%";
-  return (
-    <div
-      className={`w-5 rounded-t transition-all ${className}`}
-      style={{ height: h }}
-      title={`${valor > 0 ? money(valor) : "$0"} (${moneyShort(valor)})`}
-    />
   );
 }
