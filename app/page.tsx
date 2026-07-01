@@ -26,6 +26,15 @@ function shortPeriod(p: string): string {
   return idx >= 0 ? `${MES_ABBR[idx]} ${yy}` : p;
 }
 
+// El período bancario es "Mayo 2026"; bills_360 usa "M-YYYY" (ej. "5-2026").
+// Se convierte para consultar Cartera del mismo mes.
+function toBillPeriod(p: string): string | undefined {
+  const parts = p.trim().split(/\s+/);
+  const idx = MONTHS.findIndex((m) => m.toLowerCase() === parts[0]?.toLowerCase());
+  const year = parts[1];
+  return idx >= 0 && year ? `${idx + 1}-${year}` : undefined;
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -41,7 +50,7 @@ export default async function Home({
     getBankTotalsByPeriod(),
     getBankTotalsByAccount(selected),
     getBankTotalsByWeek(selected),
-    getCartera(selected),
+    getCartera(toBillPeriod(selected)),
     getCajaConciliada(selected),
   ]);
 
