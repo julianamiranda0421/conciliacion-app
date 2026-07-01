@@ -143,18 +143,6 @@ export function IngresosEgresosChart({
             />
           ))}
 
-          {/* Etiquetas de valor sobre los puntos */}
-          {data.map((d, i) => (
-            <text key={`vi${i}`} x={ingPts[i].x} y={Math.max(11, ingPts[i].y - 9)} textAnchor="middle" fontSize="9" fontWeight="600" fill={INGRESOS}>
-              {moneyShort(d.ingresos)}
-            </text>
-          ))}
-          {data.map((d, i) => (
-            <text key={`ve${i}`} x={egrPts[i].x} y={Math.min(baseY - 3, egrPts[i].y + 14)} textAnchor="middle" fontSize="9" fill={EGRESOS}>
-              {moneyShort(d.egresos)}
-            </text>
-          ))}
-
           {/* Etiquetas del eje X */}
           {data.map((d, i) => (
             <text
