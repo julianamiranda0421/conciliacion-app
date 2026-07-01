@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Plus, Download } from "lucide-react";
+import { Trash2, Plus, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { ReconResult } from "@/lib/reconcile";
 import { accountLabel } from "@/lib/banks";
 import { fmtDate, signClass, money } from "@/lib/format";
+import { SaldosCards } from "./SaldosCards";
 
 type Col = { key: string; label: string; num?: boolean };
 type FilterType = "text" | "select" | "multi";
@@ -125,10 +126,15 @@ export function Dashboard({
   result,
   accountId,
   period,
+  showSaldos,
 }: {
   result: ReconResult;
   accountId: string;
   period: string;
+  // Cuando es true, antepone las tarjetas de saldos (inicial/ingresos/egresos/actual)
+  // a las tarjetas de conciliación. Se apaga en la pestaña físico del 7772 (allí el
+  // cierre vive en la pestaña Resumen).
+  showSaldos?: boolean;
 }) {
   const router = useRouter();
   const isAch = Array.isArray(result.otrosIngresos);
@@ -152,6 +158,7 @@ export function Dashboard({
   const [busy, setBusy] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   // Guarda la observación de una partida conciliada (por transaction_id).
   // Muestra un ✓ al guardar y avisa si falla (antes el error se tragaba en silencio).
@@ -253,6 +260,20 @@ export function Dashboard({
     return r;
   }, [rawRows, filters, sortKey, sortAsc]);
 
+  // Paginación: 20 filas por página. La página se reinicia a 1 desde los handlers
+  // que cambian pestaña/filtros/orden; safePage la mantiene en rango si las filas
+  // se reducen (ej. al filtrar).
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  // Cambia filtros y regresa a la primera página.
+  const updateFilters = (fn: (prev: Record<string, string | string[]>) => Record<string, string | string[]>) => {
+    setFilters(fn);
+    setPage(1);
+  };
+
   // Descarga el detalle conciliado del período actual en un libro de Excel:
   // una hoja de Resumen (KPIs) + una hoja por cada pestaña con sus columnas.
   function exportExcel() {
@@ -302,21 +323,24 @@ export function Dashboard({
   const k = result.resumen;
   const pctConc = k.totalIngresoBanco > 0 ? Math.round((k.totalConc / k.totalIngresoBanco) * 100) : 0;
 
-  // Total de "Otros ingresos" (ingresos del banco que NO son recaudo) — solo cuentas ACH.
-  const totalOtros = (result.otrosIngresos ?? []).reduce((s, p) => s + p.valor, 0);
-  const nOtros = (result.otrosIngresos ?? []).length;
-
   type Kpi = { cls: string; lbl: string; val: string; sub?: string; bar?: number };
+  // Nº de partidas conciliatorias pendientes (todas las de la pestaña Pendientes).
+  const nPend = result.pendientes?.length ?? 0;
+  // Tarjetas de conciliación (las de saldos se anteponen aparte con <SaldosCards/>).
+  //  - Cuentas físicas (8465): Recaudo · Valor Pendiente por Conciliar · Cheques devueltos · %
+  //  - Cuentas ACH (5571/1800/1144): Recaudo · Diferencia · %
   const kpis: Kpi[] = [
-    // Total ingreso bancario: sin subtítulo (el título resaltado va en negrita como los demás).
-    { cls: "ok", lbl: "Total Ingreso Bancario", val: money(k.totalIngresoBanco) },
     { cls: "ok", lbl: "Recaudo Conciliado", val: money(k.totalConc), sub: `${k.nConc} cruces · ${pctConc}% del ingreso bancario` },
-    // Otros ingresos (no recaudo) — solo aplica a cuentas ACH (tienen esa categoría).
-    ...(isAch ? [{ cls: "ok", lbl: "Otros ingresos", val: money(totalOtros), sub: `${nOtros} ingreso(s) que no son recaudo` }] : []),
-    { cls: Math.abs(k.totalPendiente) > 1 ? "bad" : "ok", lbl: "Pendiente por Conciliar", val: money(k.totalPendiente), sub: isAch ? "solo recaudo pendiente" : "Ingreso Bancario − Recaudo" },
-    isAch
-      ? { cls: k.diferenciaValor > 1 ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` }
-      : { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(-k.totalDevValor), sub: `${k.nDev} cheque(s)` },
+    ...(isAch
+      ? [
+          { cls: k.diferenciaValor > 1 ? "bad" : "ok", lbl: "Diferencia", val: money(k.diferenciaValor), sub: `${k.descuadre} caso(s) con diferencia` },
+        ]
+      : [
+          // Valor total de TODAS las partidas conciliatorias pendientes (recaudos sin
+          // cruzar + pagos sin ingreso + cheques devueltos en negativo).
+          { cls: Math.abs(k.totalPendiente) > 1 ? "warn" : "ok", lbl: "Valor Pendiente por Conciliar", val: money(k.totalPendiente), sub: `${nPend} partida(s) conciliatoria(s)` },
+          { cls: k.totalDevValor > 0 ? "bad" : "ok", lbl: "Cheques devueltos", val: money(-k.totalDevValor), sub: `${k.nDev} cheque(s)` },
+        ]),
     // % de lo que ingresó al banco que se cruzó como recaudo.
     { cls: "ok", lbl: "% Recaudo / Ingreso bancario", val: `${pctConc}%`, sub: "recaudo conciliado vs ingreso", bar: pctConc },
   ];
@@ -326,12 +350,15 @@ export function Dashboard({
 
   return (
     <div>
-      {/* KPIs — máx. 3 por fila para que los montos grandes (miles de millones) no se corten. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Barra de saldos del mes (ecuación del cierre), a todo el ancho. */}
+      {showSaldos && <SaldosCards />}
+
+      {/* KPIs de conciliación — 4 por fila (tarjetas compactas). */}
+      <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${showSaldos ? "mt-4" : ""}`}>
         {kpis.map((c) => (
-          <div key={c.lbl} className="rounded-xl border border-line bg-white p-4 shadow-sm">
+          <div key={c.lbl} className="rounded-xl border border-line bg-white p-3.5 shadow-sm">
             <div className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{c.lbl}</div>
-            <div className={`mt-1 text-2xl font-bold tabular-nums ${valClass(c.cls)}`}>{c.val}</div>
+            <div className={`mt-1 text-xl font-bold tabular-nums ${valClass(c.cls)}`}>{c.val}</div>
             {c.sub && <div className="mt-1 text-xs text-ink-soft">{c.sub}</div>}
             {c.bar != null && (
               <div className="mt-2 h-1 overflow-hidden rounded bg-line">
@@ -354,6 +381,7 @@ export function Dashboard({
                 setCurrent(t.id);
                 setSortKey(null);
                 setFilters({});
+                setPage(1);
               }}
               className={`rounded-full border px-4 py-2 text-sm transition ${
                 active
@@ -380,7 +408,7 @@ export function Dashboard({
                 key={f.key}
                 value={(filters[f.key] as string) ?? ""}
                 onChange={(e) =>
-                  setFilters((prev) => {
+                  updateFilters((prev) => {
                     const next = { ...prev };
                     if (e.target.value) next[f.key] = e.target.value;
                     else delete next[f.key];
@@ -404,7 +432,7 @@ export function Dashboard({
                     <button
                       key={v}
                       onClick={() =>
-                        setFilters((prev) => {
+                        updateFilters((prev) => {
                           const cur = Array.isArray(prev[f.key]) ? [...(prev[f.key] as string[])] : [];
                           const i = cur.indexOf(v);
                           if (i >= 0) cur.splice(i, 1);
@@ -434,7 +462,7 @@ export function Dashboard({
               key={f.key}
               value={(filters[f.key] as string) ?? ""}
               onChange={(e) =>
-                setFilters((prev) => {
+                updateFilters((prev) => {
                   const next = { ...prev };
                   if (e.target.value) next[f.key] = e.target.value;
                   else delete next[f.key];
@@ -484,8 +512,9 @@ export function Dashboard({
           Sin registros en esta categoría ✓
         </div>
       ) : (
+        <>
         <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[65vh]">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
@@ -498,8 +527,9 @@ export function Dashboard({
                           setSortKey(c.key);
                           setSortAsc(true);
                         }
+                        setPage(1);
                       }}
-                      className="cursor-pointer whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft"
+                      className="sticky top-0 z-10 cursor-pointer whitespace-nowrap border-b border-line bg-surface px-3.5 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft"
                     >
                       {c.label}
                     </th>
@@ -507,7 +537,7 @@ export function Dashboard({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => {
+                {pageRows.map((row, i) => {
                   const sig = String(row.sig ?? "");
                   const rowBusy = busy === sig && sig !== "";
                   return (
@@ -633,6 +663,33 @@ export function Dashboard({
             </table>
           </div>
         </div>
+        {rows.length > pageSize && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-soft">
+            <span>
+              Mostrando {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, rows.length)} de {rows.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(safePage - 1)}
+                disabled={safePage <= 1}
+                className="inline-flex h-9 items-center gap-1 rounded-md border border-line bg-white px-3 font-medium transition hover:border-primary hover:text-primary disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </button>
+              <span className="tabular-nums">Página {safePage} de {totalPages}</span>
+              <button
+                onClick={() => setPage(safePage + 1)}
+                disabled={safePage >= totalPages}
+                className="inline-flex h-9 items-center gap-1 rounded-md border border-line bg-white px-3 font-medium transition hover:border-primary hover:text-primary disabled:opacity-40"
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
@@ -651,16 +708,16 @@ function Cell({ col, value }: { col: Col; value: unknown }) {
     );
   }
   if (col.key === "nivelMatch") {
-    const alto = value === "ALTO";
+    const v = String(value ?? "");
+    const cls =
+      v === "ALTO"
+        ? "bg-success/15 text-success"
+        : v === "MEDIO-ALTO"
+          ? "bg-primary-light text-primary"
+          : "bg-warning/20 text-warning";
     return (
       <td className={base}>
-        <span
-          className={`rounded-md px-2 py-1 text-xs font-bold ${
-            alto ? "bg-success/15 text-success" : "bg-warning/20 text-warning"
-          }`}
-        >
-          {String(value)}
-        </span>
+        <span className={`rounded-md px-2 py-1 text-xs font-bold ${cls}`}>{v}</span>
       </td>
     );
   }

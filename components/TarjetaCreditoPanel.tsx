@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 import type { TcResult, TcDetalle } from "@/lib/reconcileTC";
 // money (alias cop): mismo formato que el Conciliado físico, negativos con "-$".
 import { fmtDate, signClass, money as cop } from "@/lib/format";
+import { usePaged } from "./usePaged";
+import { Pager } from "./Pager";
 
 export function TarjetaCreditoPanel({
   result,
@@ -46,6 +48,11 @@ export function TarjetaCreditoPanel({
   const pendientes = useMemo(() => result.detalle.filter((d) => !d.link), [result.detalle]);
   const movimientos = result.movimientos;
 
+  // Paginación independiente por pestaña (20 filas/página).
+  const concPaged = usePaged(conciliadas);
+  const pendPaged = usePaged(pendientes);
+  const movPaged = usePaged(movimientos);
+
   // Tarjetas KPI, mismo estilo que recaudo físico. Lógica (ejemplo 10/2/12/6/6/50%):
   // Ingreso Bancario (Nc, neto) + Adquirencias (comisión) = Ingreso neto (bruto).
   // Pendiente = Ingreso neto − Valor conciliado; Recaudo% = Valor conciliado / Ingreso neto.
@@ -73,7 +80,7 @@ export function TarjetaCreditoPanel({
     { id: "mov" as const, label: "Movimientos Bancarios", n: movimientos.length },
   ];
 
-  const th = "whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft";
+  const th = "sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft";
   const td = "whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm";
   const tdNum = `${td} tabular-nums`;
 
@@ -126,7 +133,7 @@ export function TarjetaCreditoPanel({
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <input
               value={fFactura}
-              onChange={(e) => setFFactura(e.target.value)}
+              onChange={(e) => { setFFactura(e.target.value); concPaged.setPage(1); }}
               placeholder="Buscar factura…"
               className="h-10 w-44 rounded-md border border-line bg-white px-3 text-sm"
             />
@@ -138,7 +145,7 @@ export function TarjetaCreditoPanel({
             </div>
           ) : (
             <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
@@ -148,7 +155,7 @@ export function TarjetaCreditoPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {conciliadas.map((d, i) => {
+                    {concPaged.pageRows.map((d, i) => {
                       const txnId = d.link!.transactionId;
                       const statusOk = d.link!.statusFactura === "SUCCESS";
                       return (
@@ -194,6 +201,7 @@ export function TarjetaCreditoPanel({
               </div>
             </div>
           )}
+          <Pager page={concPaged.page} totalPages={concPaged.totalPages} pageSize={concPaged.pageSize} total={concPaged.total} onChange={concPaged.setPage} />
         </>
       )}
 
@@ -209,7 +217,7 @@ export function TarjetaCreditoPanel({
             </div>
           ) : (
             <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
@@ -219,7 +227,7 @@ export function TarjetaCreditoPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {pendientes.map((d, i) => (
+                    {pendPaged.pageRows.map((d, i) => (
                       <tr key={i} className="hover:bg-primary-light/40">
                         <td className={td}>{fmtDate(d.fechaVale)}</td>
                         <td className={td}>{fmtDate(d.fechaAbono)}</td>
@@ -244,6 +252,7 @@ export function TarjetaCreditoPanel({
               </div>
             </div>
           )}
+          <Pager page={pendPaged.page} totalPages={pendPaged.totalPages} pageSize={pendPaged.pageSize} total={pendPaged.total} onChange={pendPaged.setPage} />
         </>
       )}
 
@@ -259,13 +268,13 @@ export function TarjetaCreditoPanel({
             </div>
           ) : (
             <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>{["Fecha", "Descripción", "Valor"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
-                    {movimientos.map((m, i) => (
+                    {movPaged.pageRows.map((m, i) => (
                       <tr key={i} className="hover:bg-primary-light/40">
                         <td className={td}>{fmtDate(m.fecha)}</td>
                         <td className={td}>{m.descripcion}</td>
@@ -283,6 +292,7 @@ export function TarjetaCreditoPanel({
               </div>
             </div>
           )}
+          <Pager page={movPaged.page} totalPages={movPaged.totalPages} pageSize={movPaged.pageSize} total={movPaged.total} onChange={movPaged.setPage} />
 
           {/* Cuadre por día: neto de adquirencias vs Nc del banco */}
           <details className="mt-4 rounded-lg border border-line bg-white">

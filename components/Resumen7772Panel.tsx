@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Resumen7772 } from "@/lib/resumen7772";
 import { fmtDate, signClass, money as cop } from "@/lib/format";
+import { usePaged } from "./usePaged";
+import { Pager } from "./Pager";
 
 export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
   const [fRecaudo, setFRecaudo] = useState("");
@@ -25,6 +27,7 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
       ),
     [resumen.movimientos, fRecaudo, fTran],
   );
+  const { page, setPage, pageRows, totalPages, pageSize, total } = usePaged(movs);
 
   return (
     <div>
@@ -54,11 +57,11 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
       {/* Movimientos bancarios completos */}
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <h3 className="text-sm font-semibold">Movimientos bancarios (extracto completo)</h3>
-        <select value={fRecaudo} onChange={(e) => setFRecaudo(e.target.value)} className="h-9 max-w-[280px] rounded-md border border-line bg-white px-3 text-sm">
+        <select value={fRecaudo} onChange={(e) => { setFRecaudo(e.target.value); setPage(1); }} className="h-9 max-w-[280px] rounded-md border border-line bg-white px-3 text-sm">
           <option value="">Todo recaudo</option>
           {recaudos.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select value={fTran} onChange={(e) => setFTran(e.target.value)} className="h-9 rounded-md border border-line bg-white px-3 text-sm">
+        <select value={fTran} onChange={(e) => { setFTran(e.target.value); setPage(1); }} className="h-9 rounded-md border border-line bg-white px-3 text-sm">
           <option value="">Todo Tran</option>
           <option value="Nota Crédito">Nota Crédito</option>
           <option value="Nota Débito">Nota Débito</option>
@@ -66,17 +69,18 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
         <span className="text-sm text-ink-soft">{movs.length} de {resumen.movimientos.length}</span>
       </div>
 
-      <div className="mt-3 overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+        <div className="overflow-auto max-h-[65vh]">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
               {["Fecha", "Concepto", "Recaudo", "Tran", "Valor"].map((h) => (
-                <th key={h} className="whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-center text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
+                <th key={h} className="sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface px-3 py-2 text-center text-[11px] uppercase tracking-wide text-ink-soft">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {movs.map((m, i) => (
+            {pageRows.map((m, i) => (
               <tr key={i} className="hover:bg-primary-light/40">
                 <td className="whitespace-nowrap border-b border-line px-3 py-2 text-center">{fmtDate(m.fecha)}</td>
                 <td className="border-b border-line px-3 py-2 text-center">{m.descripcion}</td>
@@ -87,7 +91,9 @@ export function Resumen7772Panel({ resumen }: { resumen: Resumen7772 }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
+      <Pager page={page} totalPages={totalPages} pageSize={pageSize} total={total} onChange={setPage} />
     </div>
   );
 }

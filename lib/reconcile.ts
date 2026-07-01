@@ -34,6 +34,13 @@ export type ChequeConfig = {
   // así que "ingreso al banco" y "movimientos" de esta vista se limitan al recaudo
   // físico/cheque (no a todos los positivos del extracto). Útil para Davivienda 7772.
   multiChannel?: boolean;
+  // Refuerzo de la llave por MÉTODO de pago de Cartera 360: identifica las
+  // transacciones que "pertenecen" a esta cuenta (ej. 8465 = PHYSICAL / Integración
+  // Bancolombia). No bloquea: si no hay una del método pero calza el valor, igual
+  // cruza; pero cuando varias transacciones calzan por valor, la del método tiene
+  // prioridad y sube el nivel del cruce (evita que un PSE/TC del mismo monto se robe
+  // el recaudo físico).
+  metodoDeCuenta?: (t: Transaction) => boolean;
 };
 const DEFAULT_CHEQUE: ChequeConfig = {
   conceptos: CONCEPTOS_RECAUDO,
@@ -54,7 +61,7 @@ export type Conciliado = {
   fechaPago: string;
   sucursal: string;
   tipo: string;
-  nivelMatch: "ALTO" | "MEDIO";
+  nivelMatch: "ALTO" | "MEDIO-ALTO" | "MEDIO";
   // Enriquecidos desde bills_360 (se llenan en la página, por transaction_id):
   periodoFactura?: string;
   valorFactura?: number;
@@ -187,12 +194,21 @@ export function reconcile(
       )
     : txns;
 
-  for (const t of txnsToMatch) {
+  // Si la cuenta define un método propio (ej. 8465 = físico/Integración Bancolombia),
+  // sus transacciones se procesan PRIMERO para que reclamen su recaudo antes de que un
+  // pago de otro método (PSE/TC) del mismo valor se lo lleve. Orden estable (V8).
+  const metodoDe = cfg.metodoDeCuenta;
+  const ordenadas = metodoDe
+    ? [...txnsToMatch].sort((a, b) => (metodoDe(a) ? 0 : 1) - (metodoDe(b) ? 0 : 1))
+    : txnsToMatch;
+
+  for (const t of ordenadas) {
     const disponibles = recaudos.filter((r) => !r.usado);
     const porFactura = disponibles.filter((r) => r.bill === t.billId);
+    const esMetodo = metodoDe ? metodoDe(t) : false;
 
     let elegido: (typeof recaudos)[number] | undefined;
-    let nivel: "ALTO" | "MEDIO";
+    let nivel: "ALTO" | "MEDIO-ALTO" | "MEDIO";
 
     if (porFactura.length) {
       const mismoValor = porFactura.filter((r) => r.valor === t.amount);
@@ -219,7 +235,8 @@ export function reconcile(
       elegido = [...pool].sort(
         (a, b) => dayDist(a.fecha, t.paymentDate) - dayDist(b.fecha, t.paymentDate),
       )[0];
-      nivel = "MEDIO";
+      // Cruce por valor: si además el método es el de la cuenta, sube la confianza.
+      nivel = esMetodo ? "MEDIO-ALTO" : "MEDIO";
     }
 
     recaudos[elegido._i].usado = true;
@@ -601,6 +618,10 @@ const CHEQUE_CONFIG: Record<string, ChequeConfig> = {
     billOf: (m) => m.billId,
     restrictTxnsToRecaudoBills: true,
     restrictAlsoByValue: true,
+    // A la 8465 solo entra recaudo FÍSICO por la integración Bancolombia (efectivo o
+    // cheque). Ese método identifica las transacciones que pertenecen a esta cuenta.
+    metodoDeCuenta: (t) =>
+      t.paymentMethodType === "PHYSICAL" && /integraci[oó]n\s+bancolombia/i.test(t.paymentMethodName),
   },
   // Davivienda 7772: recaudo físico/cheque. Conceptos del extracto y la factura
   // va en Referencia 1 (parser la deja en ref2, con ceros a la izquierda).

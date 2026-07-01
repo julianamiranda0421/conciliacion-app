@@ -184,6 +184,42 @@ create table if not exists pse_transactions (
 );
 create index if not exists idx_pse_period on pse_transactions(period);
 
+-- Cierre de conciliación por cuenta y período: los saldos que el usuario digita
+-- del extracto (saldo inicial, ingresos, egresos, saldo final) + el estado de
+-- aprobación del mes. Un registro por (period, account_id). El cierre se aprueba
+-- solo cuando los saldos digitados cuadran contra los movimientos cargados.
+create table if not exists recon_closing (
+  id             bigserial primary key,
+  period         text not null,
+  account_id     text not null,
+  saldo_inicial  numeric,
+  ingresos       numeric,
+  egresos        numeric,
+  saldo_final    numeric,
+  aprobado       boolean not null default false,
+  aprobado_por   text,
+  aprobado_en    timestamptz,
+  updated_at     timestamptz default now(),
+  unique(period, account_id)
+);
+create index if not exists idx_closing_period_acct on recon_closing(period, account_id);
+
+-- Vínculo factura↔movimiento por cuenta y período. Se llena cuando se sube un
+-- archivo que SÍ trae factura (los "CORTE"/consulta de movimientos). Sirve para que,
+-- al subir después el estado de cuenta oficial (que NO trae factura), cada movimiento
+-- herede su factura por fecha+valor y NO se pierda la conciliación ya hecha.
+-- Se reemplaza por período+cuenta en cada carga con facturas (delete + insert).
+create table if not exists movement_bills (
+  id          bigserial primary key,
+  period      text not null,
+  account_id  text not null,
+  fecha       date,
+  valor       numeric,
+  bill_id     text,
+  created_at  timestamptz default now()
+);
+create index if not exists idx_movbills_period_acct on movement_bills(period, account_id);
+
 create index if not exists idx_b360_bill on bills_360(bill_id);
 create index if not exists idx_b360_period on bills_360(period);
 create index if not exists idx_b360_company on bills_360(company_id);

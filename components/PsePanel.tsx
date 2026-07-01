@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 import type { PseResult, PseConciliado } from "@/lib/reconcilePse";
 // money (alias cop): mismo formato que el Conciliado físico, negativos con "-$".
 import { fmtDate, signClass, money as cop } from "@/lib/format";
+import { usePaged } from "./usePaged";
+import { Pager } from "./Pager";
 
 // Tolerancia de cuadre: el amount de bills_360 trae decimales → diferencia de
 // redondeo de unos miles sobre miles de millones se considera cuadre.
@@ -67,6 +69,12 @@ export function PsePanel({
     [result.gateway, bancoFil],
   );
 
+  // Paginación independiente por pestaña (20 filas/página).
+  const concPaged = usePaged(conciliadas);
+  const pendPaged = usePaged(pendAch);
+  const movPaged = usePaged(movimientos);
+  const gwPaged = usePaged(gatewayFiltrado);
+
   const valClass = (cls: string) =>
     cls === "ok" ? "text-success" : cls === "bad" ? "text-error" : cls === "warn" ? "text-warning" : cls === "primary" ? "text-primary" : "";
   const diffOk = Math.abs(r.diffAchVsBanco) <= TOL;
@@ -86,7 +94,7 @@ export function PsePanel({
     { id: "gw" as const, label: "Detalle gateway (archivo ACH)", n: result.gateway.length },
   ];
 
-  const th = "whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft";
+  const th = "sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface px-3 py-2.5 text-center text-[11px] uppercase tracking-wide text-ink-soft";
   const td = "whitespace-nowrap border-b border-line px-3 py-2.5 text-center text-sm";
   const tdNum = `${td} tabular-nums`;
 
@@ -142,13 +150,13 @@ export function PsePanel({
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <input
               value={fFactura}
-              onChange={(e) => setFFactura(e.target.value)}
+              onChange={(e) => { setFFactura(e.target.value); concPaged.setPage(1); }}
               placeholder="Buscar factura o CUS…"
               className="h-10 w-52 rounded-md border border-line bg-white px-3 text-sm"
             />
             <select
               value={soloDif ? "dif" : ""}
-              onChange={(e) => setSoloDif(e.target.value === "dif")}
+              onChange={(e) => { setSoloDif(e.target.value === "dif"); concPaged.setPage(1); }}
               className="h-10 rounded-md border border-line bg-white px-3 text-sm"
             >
               <option value="">Diferencia: Todas</option>
@@ -162,7 +170,7 @@ export function PsePanel({
             </div>
           ) : (
             <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
@@ -172,7 +180,7 @@ export function PsePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {conciliadas.map((c, i) => {
+                    {concPaged.pageRows.map((c, i) => {
                       const statusOk = c.statusFactura === "SUCCESS";
                       return (
                         <tr key={i} className={`hover:bg-primary-light/40 ${c.otroCiclo ? "bg-warning/5" : ""}`}>
@@ -238,6 +246,7 @@ export function PsePanel({
               </div>
             </div>
           )}
+          <Pager page={concPaged.page} totalPages={concPaged.totalPages} pageSize={concPaged.pageSize} total={concPaged.total} onChange={concPaged.setPage} />
         </>
       )}
 
@@ -257,13 +266,13 @@ export function PsePanel({
             </div>
           ) : (
             <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>{["CUS", "Valor", "Fecha", "Banco originador", "Pagador (NIT/CC)", "Ciclo", "Observaciones"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
-                    {pendAch.map((p, i) => (
+                    {pendPaged.pageRows.map((p, i) => (
                       <tr key={i} className={`hover:bg-primary-light/40 ${p.otroCiclo ? "bg-warning/5" : ""}`}>
                         <td className={td}>{p.cus}</td>
                         <td className={`${tdNum} ${signClass(p.valor)}`}>{cop(p.valor)}</td>
@@ -299,6 +308,7 @@ export function PsePanel({
               </div>
             </div>
           )}
+          <Pager page={pendPaged.page} totalPages={pendPaged.totalPages} pageSize={pendPaged.pageSize} total={pendPaged.total} onChange={pendPaged.setPage} />
 
           {/* Partidas del lado BANCO: recaudo fuera del corte del archivo ACH (otra naturaleza:
               no son transacciones PSE con NIT, así que van en su propia tabla con Concepto). */}
@@ -309,7 +319,7 @@ export function PsePanel({
                 reporta (corte del banco posterior al del archivo). Cuadra al cargar el ACH del corte correspondiente.
               </p>
               <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-                <div className="overflow-x-auto">
+                <div className="overflow-auto max-h-[65vh]">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>{["Concepto", "Valor", "Estado", "Observaciones"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
@@ -355,13 +365,13 @@ export function PsePanel({
             </div>
           ) : (
             <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>{["Fecha", "Descripción", "Documento", "Valor"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
-                    {movimientos.map((m, i) => (
+                    {movPaged.pageRows.map((m, i) => (
                       <tr key={i} className="hover:bg-primary-light/40">
                         <td className={td}>{fmtDate(m.fecha)}</td>
                         <td className={td}>{m.descripcion}</td>
@@ -380,6 +390,7 @@ export function PsePanel({
               </div>
             </div>
           )}
+          <Pager page={movPaged.page} totalPages={movPaged.totalPages} pageSize={movPaged.pageSize} total={movPaged.total} onChange={movPaged.setPage} />
 
           {/* Cuadre por día: archivo ACH (por fecha) vs depósito banco. El banco abona
               con rezago de ciclo, así que el diario no coincide; el total del mes sí. */}
@@ -425,7 +436,7 @@ export function PsePanel({
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <select
               value={bancoFil}
-              onChange={(e) => setBancoFil(e.target.value)}
+              onChange={(e) => { setBancoFil(e.target.value); gwPaged.setPage(1); }}
               className="h-10 rounded-md border border-line bg-white px-3 text-sm"
             >
               <option value="">Banco originador: Todos</option>
@@ -441,7 +452,7 @@ export function PsePanel({
             </div>
           ) : (
             <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[65vh]">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
@@ -451,7 +462,7 @@ export function PsePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {gatewayFiltrado.map((g, i) => (
+                    {gwPaged.pageRows.map((g, i) => (
                       <tr key={`${g.cus}-${i}`} className="hover:bg-primary-light/40">
                         <td className={td}>{fmtDate(g.fecha)}</td>
                         <td className={td}>{g.hora}</td>
@@ -475,6 +486,7 @@ export function PsePanel({
               </div>
             </div>
           )}
+          <Pager page={gwPaged.page} totalPages={gwPaged.totalPages} pageSize={gwPaged.pageSize} total={gwPaged.total} onChange={gwPaged.setPage} />
         </>
       )}
 

@@ -401,6 +401,169 @@ export async function getLoads(period?: string): Promise<LoadRow[]> {
   }
 }
 
+// ---- Cierre de conciliación (saldos digitados + aprobación por período/cuenta) ----
+// Defensivas: si la tabla recon_closing aún no existe, no rompen el flujo principal.
+export type ClosingRow = {
+  period: string;
+  account_id: string;
+  saldo_inicial: number | null;
+  ingresos: number | null;
+  egresos: number | null;
+  saldo_final: number | null;
+  aprobado: boolean;
+  aprobado_por: string | null;
+  aprobado_en: string | null;
+  updated_at: string;
+};
+
+export type ClosingValues = {
+  saldoInicial: number | null;
+  ingresos: number | null;
+  egresos: number | null;
+  saldoFinal: number | null;
+};
+
+export async function getClosing(
+  period: string,
+  accountId: string,
+): Promise<ClosingRow | null> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("recon_closing")
+      .select("*")
+      .eq("period", period)
+      .eq("account_id", accountId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as ClosingRow) ?? null;
+  } catch (e) {
+    console.warn("getClosing omitido:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+// Guarda/actualiza los saldos digitados SIN tocar el estado de aprobación.
+// Editar los saldos de un mes ya aprobado lo reabre (aprobado = false), para que
+// no quede "aprobado" con números distintos a los que se validaron.
+export async function saveClosing(
+  period: string,
+  accountId: string,
+  vals: ClosingValues,
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.from("recon_closing").upsert(
+    {
+      period,
+      account_id: accountId,
+      saldo_inicial: vals.saldoInicial,
+      ingresos: vals.ingresos,
+      egresos: vals.egresos,
+      saldo_final: vals.saldoFinal,
+      aprobado: false,
+      aprobado_por: null,
+      aprobado_en: null,
+      updated_at: new Date().toISOString(),
+    } as never,
+    { onConflict: "period,account_id" },
+  );
+  if (error) throw new Error(`saveClosing: ${error.message}`);
+}
+
+// Aprueba el cierre del mes con los saldos dados (el servidor ya re-validó el cuadre).
+export async function approveClosing(
+  period: string,
+  accountId: string,
+  vals: ClosingValues,
+  aprobadoPor: string,
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.from("recon_closing").upsert(
+    {
+      period,
+      account_id: accountId,
+      saldo_inicial: vals.saldoInicial,
+      ingresos: vals.ingresos,
+      egresos: vals.egresos,
+      saldo_final: vals.saldoFinal,
+      aprobado: true,
+      aprobado_por: aprobadoPor,
+      aprobado_en: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as never,
+    { onConflict: "period,account_id" },
+  );
+  if (error) throw new Error(`approveClosing: ${error.message}`);
+}
+
+// Reabre un cierre aprobado (deja los saldos digitados, quita la aprobación).
+export async function reopenClosing(period: string, accountId: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("recon_closing")
+    .update({
+      aprobado: false,
+      aprobado_por: null,
+      aprobado_en: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("period", period)
+    .eq("account_id", accountId);
+  if (error) throw new Error(`reopenClosing: ${error.message}`);
+}
+
+// ---- Vínculo factura↔movimiento (para fusionar el extracto sin perder facturas) ----
+// Defensivas: si la tabla movement_bills aún no existe, no rompen la carga.
+export type BillPair = { fecha: string; valor: number; billId: string };
+
+// Reemplaza el mapa factura↔movimiento del período+cuenta con el set dado (solo los
+// movimientos que traen factura). Se llama al subir un archivo con facturas (CORTE).
+export async function saveMovementBills(
+  period: string,
+  accountId: string,
+  pairs: BillPair[],
+): Promise<void> {
+  try {
+    const sb = getSupabase();
+    await sb.from("movement_bills").delete().eq("period", period).eq("account_id", accountId);
+    if (pairs.length === 0) return;
+    await insertChunked(
+      "movement_bills",
+      pairs.map((p) => ({
+        period,
+        account_id: accountId,
+        fecha: p.fecha || null,
+        valor: p.valor,
+        bill_id: p.billId,
+      })),
+    );
+  } catch (e) {
+    console.warn("saveMovementBills omitido:", e instanceof Error ? e.message : e);
+  }
+}
+
+export async function getMovementBills(
+  period: string,
+  accountId: string,
+): Promise<BillPair[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("movement_bills")
+      .select("fecha,valor,bill_id")
+      .eq("period", period)
+      .eq("account_id", accountId);
+    if (error) throw error;
+    return (data ?? []).map((r) => {
+      const m = r as Record<string, unknown>;
+      return { fecha: String(m.fecha ?? ""), valor: Number(m.valor), billId: String(m.bill_id ?? "") };
+    });
+  } catch (e) {
+    console.warn("getMovementBills omitido:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
 // ---- Clasificación manual de movimientos (marcar ingreso como recaudo) ----
 // Defensivas: si la tabla movement_flags no existe, no rompen el flujo.
 export async function getMovementFlags(period: string, accountId: string): Promise<string[]> {

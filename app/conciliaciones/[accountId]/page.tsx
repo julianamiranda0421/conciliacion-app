@@ -4,11 +4,17 @@ import { ArrowLeft } from "lucide-react";
 import { getAccount } from "@/lib/banks";
 import { filterForAccount } from "@/lib/parseTransactions";
 import { reconcileForAccount } from "@/lib/reconcile";
-import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations, getPse, getPseTransactions, getDevObservations } from "@/lib/db";
+import { getBankMovements, getReconTransactions, listReconPeriods, accountHasData, getLoads, getMovementFlags, enrichConciliado, getAdquirencias, getTcTransactionsByAmounts, getObservations, getPse, getPseTransactions, getDevObservations, getClosing } from "@/lib/db";
+import { computeMovTotals } from "@/lib/closing";
+import type { BankMovement } from "@/lib/parseBank";
 import { reconcileTC } from "@/lib/reconcileTC";
 import { reconcilePse } from "@/lib/reconcilePse";
 import { Dashboard } from "@/components/Dashboard";
-import { ConciliacionPeriodSelect } from "@/components/ConciliacionPeriodSelect";
+import { CierreProvider } from "@/components/CierreContext";
+import { AccountSwitcher } from "@/components/AccountSwitcher";
+import { ConciliacionMonthSelect } from "@/components/ConciliacionMonthSelect";
+import { AprobarConciliacionButton } from "@/components/AprobarConciliacionButton";
+import { SaldosCards } from "@/components/SaldosCards";
 import { TarjetaCreditoPanel } from "@/components/TarjetaCreditoPanel";
 import { Cuenta7772Tabs } from "@/components/Cuenta7772Tabs";
 import { Resumen7772Panel } from "@/components/Resumen7772Panel";
@@ -48,42 +54,65 @@ export default async function ConciliacionCuentaPage({
   const hasData = await accountHasData(period, accountId);
   const loads = await getLoads(period);
   const cutoff = loads.find((l) => l.scope === accountId)?.cutoff_date ?? null;
+  const closing = await getClosing(period, accountId);
+
+  // Movimientos del extracto (para las tarjetas de saldos y la conciliación). Se
+  // leen una sola vez aquí y se pasan a las secciones para no consultarlos dos veces.
+  const banco = hasData ? await getBankMovements(period, accountId) : [];
+  const totals = computeMovTotals(banco);
+  // Las tarjetas de saldos usan los totales DECLARADOS en el extracto (guardados en el
+  // cierre al cargar: Más Créditos/Menos Débitos); si no hay, caen a la suma de movimientos.
+  const ingresos = closing?.ingresos ?? totals.ingresos;
+  const egresos = closing?.egresos ?? totals.egresos;
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <Link href="/conciliaciones" className="inline-flex items-center gap-2 text-sm text-ink-soft hover:text-ink">
-        <ArrowLeft className="h-4 w-4" />
-        Volver a conciliaciones
-      </Link>
+    <CierreProvider
+      period={period}
+      accountId={accountId}
+      hasData={hasData}
+      ingresos={ingresos}
+      egresos={egresos}
+      initial={closing}
+    >
+      <div className="mx-auto max-w-7xl">
+        <Link href="/conciliaciones" className="inline-flex items-center gap-2 text-sm text-ink-soft hover:text-ink">
+          <ArrowLeft className="h-4 w-4" />
+          Volver a conciliaciones
+        </Link>
 
-      <div className="mt-3 flex items-center justify-between">
-        <div>
+        <div className="mt-3">
           <h1 className="text-2xl font-bold">{account.bank} {account.accountNumber}</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Conciliación Bancaria {period}
             {cutoff ? ` - Corte ${formatCorte(cutoff)}` : ""}
           </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <ConciliacionPeriodSelect accountId={accountId} periods={periods} current={period} />
-        </div>
-      </div>
 
-      <div className="mt-6">
-        {accountId === "davivienda-7772" ? (
-          <Cuenta7772Tabs
-            resumen={hasData ? <Resumen7772Section accountId={accountId} period={period} /> : <NoBankData period={period} />}
-            fisico={hasData ? <AccountDashboard accountId={accountId} period={period} /> : <NoBankData period={period} />}
-            tc={<TarjetaCreditoSection accountId={accountId} period={period} />}
-            pse={<PseSection accountId={accountId} period={period} />}
-          />
-        ) : !hasData ? (
-          <NoBankData period={period} />
-        ) : (
-          <AccountDashboard accountId={accountId} period={period} />
-        )}
+          {/* Selector de cuenta + mes (izq.) y botón de aprobación (der.) */}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <AccountSwitcher current={accountId} period={period} />
+            <ConciliacionMonthSelect accountId={accountId} current={period} />
+            <div className="ml-auto">
+              <AprobarConciliacionButton />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {accountId === "davivienda-7772" ? (
+            <Cuenta7772Tabs
+              resumen={hasData ? <Resumen7772Section banco={banco} /> : <NoBankData period={period} />}
+              fisico={hasData ? <AccountDashboard accountId={accountId} period={period} banco={banco} /> : <NoBankData period={period} />}
+              tc={<TarjetaCreditoSection accountId={accountId} period={period} />}
+              pse={<PseSection accountId={accountId} period={period} />}
+            />
+          ) : !hasData ? (
+            <NoBankData period={period} />
+          ) : (
+            <AccountDashboard accountId={accountId} period={period} banco={banco} showSaldos />
+          )}
+        </div>
       </div>
-    </div>
+    </CierreProvider>
   );
 }
 
@@ -132,10 +161,17 @@ async function PseSection({ accountId, period }: { accountId: string; period: st
   );
 }
 
-// Resumen consolidado del 7772: ingreso total por canal + extracto completo.
-async function Resumen7772Section({ accountId, period }: { accountId: string; period: string }) {
-  const banco = await getBankMovements(period, accountId);
-  return <Resumen7772Panel resumen={resumen7772(banco)} />;
+// Resumen consolidado del 7772: las tarjetas de saldos (aplican a TODO el extracto
+// del 7772) arriba, y debajo el ingreso total por canal + extracto completo.
+function Resumen7772Section({ banco }: { banco: BankMovement[] }) {
+  return (
+    <div>
+      <div className="mb-6">
+        <SaldosCards />
+      </div>
+      <Resumen7772Panel resumen={resumen7772(banco)} />
+    </div>
+  );
 }
 
 // Sección de tarjeta de crédito (adquirencias) — solo para el 7772.
@@ -169,9 +205,21 @@ async function TarjetaCreditoSection({ accountId, period }: { accountId: string;
   );
 }
 
-async function AccountDashboard({ accountId, period }: { accountId: string; period: string }) {
-  const [banco, txnRows, flagSigs] = await Promise.all([
-    getBankMovements(period, accountId),
+// `showSaldos` antepone las tarjetas de saldos en la grilla de KPIs. Se apaga en la
+// pestaña físico del 7772 (allí los saldos viven en la pestaña Resumen). Recibe los
+// movimientos ya leídos por la página para no volver a consultarlos.
+async function AccountDashboard({
+  accountId,
+  period,
+  banco,
+  showSaldos,
+}: {
+  accountId: string;
+  period: string;
+  banco: BankMovement[];
+  showSaldos?: boolean;
+}) {
+  const [txnRows, flagSigs] = await Promise.all([
     getReconTransactions(period),
     getMovementFlags(period, accountId),
   ]);
@@ -190,5 +238,5 @@ async function AccountDashboard({ accountId, period }: { accountId: string; peri
     dev: result.dev.map((d) => ({ ...d, observacion: devObs[d.documento] ?? "" })),
   };
 
-  return <Dashboard result={enriched} accountId={accountId} period={period} />;
+  return <Dashboard result={enriched} accountId={accountId} period={period} showSaldos={showSaldos} />;
 }

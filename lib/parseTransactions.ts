@@ -29,6 +29,10 @@ export type Transaction = {
   biaCreditsUsed: number;
   s3PathDocument: string;
   paymentGroup?: string; // timestamp del giro (llave de agrupación ACH)
+  // Método de pago de Cartera 360: sirve como refuerzo de la llave (ej. la 8465
+  // solo recibe PHYSICAL / "Integración Bancolombia").
+  paymentMethodType: string;
+  paymentMethodName: string;
 };
 
 const map = (r: TxnRow): Transaction => ({
@@ -40,6 +44,8 @@ const map = (r: TxnRow): Transaction => ({
   biaCreditsUsed: r.biaCreditsUsed,
   s3PathDocument: r.s3PathDocument,
   paymentGroup: r.paymentGroup,
+  paymentMethodType: r.paymentMethodType,
+  paymentMethodName: r.paymentMethodName,
 });
 
 // ¿Es una transferencia bancaria manual? (FINANCE_TRANSFER / "Transferencia bancaria").
