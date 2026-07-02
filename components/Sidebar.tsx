@@ -35,7 +35,7 @@ export function Sidebar() {
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-sm font-bold leading-tight">bia</div>
+              <div className="text-sm font-bold leading-tight">Conciliar 360</div>
               <div className="text-xs text-ink-soft">Conciliación Bancaria</div>
             </div>
           </div>
