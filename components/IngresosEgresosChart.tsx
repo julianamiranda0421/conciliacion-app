@@ -10,10 +10,11 @@ export type SeriesPoint = { label: string; sub?: string; ingresos: number; egres
 const INGRESOS = "#5B3DF5"; // primary
 const EGRESOS = "#0A84FF"; // info
 
-// Lienzo (viewBox); el SVG escala al ancho del contenedor.
-const W = 820;
-const H = 280;
-const PAD = { l: 64, r: 20, t: 20, b: 34 };
+// Lienzo (viewBox); el SVG escala al ancho del contenedor. Relación ~1.6:1 para que
+// en la columna angosta (junto a la tabla) conserve buena altura.
+const W = 520;
+const H = 320;
+const PAD = { l: 60, r: 16, t: 20, b: 34 };
 
 type P = { x: number; y: number };
 

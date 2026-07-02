@@ -98,9 +98,7 @@ export default async function Home({
       {/* Encabezado + selector de período */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">
-            Bienvenido, <span className="text-primary">Finanzas</span> 👋
-          </h1>
+          <h1 className="text-2xl font-bold text-ink">Bienvenido, Finanzas 👋</h1>
           <p className="mt-1 text-sm text-ink-soft">Resumen gerencial del período {selected}.</p>
         </div>
         <DashboardPeriodSelect current={selected} />
@@ -114,16 +112,13 @@ export default async function Home({
         <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Pagado (Cartera)" big={`${pctPagado.toFixed(1)}%`} sub={`${moneyShort(cartera.pagado)} de ${moneyShort(cartera.valorFacturado)}`} bar={pctPagado} />
       </div>
 
-      {/* Gráfico Ingresos vs Egresos */}
-      <div className="mt-6">
-        <IngresosEgresosChart monthly={monthly} weekly={weeklySeries} />
-      </div>
-
+      {/* Cuentas (izquierda) + Gráfico (derecha), lado a lado */}
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-5">
       {/* Tabla de cuentas bancarias: saldos + estado de conciliación */}
-      <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-line bg-white p-5 shadow-sm lg:col-span-3">
         <h2 className="text-sm font-bold">Cuentas bancarias — {selected}</h2>
         <p className="mt-0.5 text-xs text-ink-soft">Saldos del mes y estado de conciliación por cuenta.</p>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
@@ -159,12 +154,12 @@ export default async function Home({
                         <span className="font-medium">{accountLabel(a.id)}</span>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums text-ink-soft">
-                      {saldoIni != null ? money(saldoIni) : "—"}
+                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right tabular-nums text-ink-soft" title={saldoIni != null ? money(saldoIni) : undefined}>
+                      {saldoIni != null ? moneyShort(saldoIni) : "—"}
                     </td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums">{money(ingresos)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums">{money(egresos)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right font-semibold tabular-nums">{money(saldoAct)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right tabular-nums" title={money(ingresos)}>{moneyShort(ingresos)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right tabular-nums" title={money(egresos)}>{moneyShort(egresos)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-semibold tabular-nums" title={money(saldoAct)}>{moneyShort(saldoAct)}</td>
                     <td className="whitespace-nowrap border-b border-line px-3.5 py-3">
                       <div className="flex items-center justify-center gap-2">
                         <EstadoBadge estado={estado} />
@@ -183,6 +178,12 @@ export default async function Home({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Gráfico Ingresos vs Egresos (columna derecha) */}
+      <div className="lg:col-span-2">
+        <IngresosEgresosChart monthly={monthly} weekly={weeklySeries} />
+      </div>
       </div>
 
       {/* Cartera 360 del período */}
