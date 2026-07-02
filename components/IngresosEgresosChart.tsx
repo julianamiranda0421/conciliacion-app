@@ -11,10 +11,10 @@ const INGRESOS = "#5B3DF5"; // primary
 const EGRESOS = "#0A84FF"; // info
 
 // Lienzo (viewBox); el SVG escala al ancho del contenedor. Relación ~1.6:1 para que
-// en la columna angosta (junto a la tabla) conserve buena altura.
-const W = 520;
-const H = 320;
-const PAD = { l: 60, r: 16, t: 20, b: 34 };
+// conserve buena altura. PAD.l amplio para que las etiquetas del eje Y no se recorten.
+const W = 560;
+const H = 340;
+const PAD = { l: 82, r: 22, t: 26, b: 38 };
 
 type P = { x: number; y: number };
 
@@ -70,9 +70,7 @@ export function IngresosEgresosChart({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold">Ingresos vs Egresos</h2>
-          <p className="mt-0.5 text-xs text-ink-soft">
-            {mode === "mes" ? "Comportamiento mes a mes (todas las cuentas)" : "Por semana del mes seleccionado"}
-          </p>
+          <p className="mt-0.5 text-xs text-ink-soft">Expresado en miles de millones de pesos</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3 text-xs text-ink-soft">

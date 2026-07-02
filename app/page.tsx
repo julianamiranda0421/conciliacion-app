@@ -36,17 +36,34 @@ function toBillPeriod(p: string): string | undefined {
   return idx >= 0 && year ? `${idx + 1}-${year}` : undefined;
 }
 
-// Rangos de fecha por semana del mes: ["1–7 de mayo", "8–14 de mayo", ...].
-function weekRanges(period: string, weekCount: number): string[] {
+// Días del mes del período. 31 por defecto si no parsea.
+function daysInPeriod(period: string): { days: number; idx: number } {
   const parts = period.trim().split(/\s+/);
   const idx = MONTHS.findIndex((m) => m.toLowerCase() === parts[0]?.toLowerCase());
   const year = Number(parts[1]);
-  const mesLower = idx >= 0 ? MONTHS[idx].toLowerCase() : "";
   const days = idx >= 0 && year ? new Date(year, idx + 1, 0).getDate() : 31;
+  return { days, idx };
+}
+
+// Rango largo por semana (tooltip): ["1–7 de mayo", "8–14 de mayo", ...].
+function weekRanges(period: string, weekCount: number): string[] {
+  const { days, idx } = daysInPeriod(period);
+  const mesLower = idx >= 0 ? MONTHS[idx].toLowerCase() : "";
   return Array.from({ length: weekCount }, (_, i) => {
     const start = i * 7 + 1;
     const end = Math.min((i + 1) * 7, days);
     return `${start}–${end} de ${mesLower}`;
+  });
+}
+
+// Rango corto por semana (eje X): ["1-7 May", "8-14 May", ...].
+function weekRangesShort(period: string, weekCount: number): string[] {
+  const { days, idx } = daysInPeriod(period);
+  const abbr = idx >= 0 ? MES_ABBR[idx] : "";
+  return Array.from({ length: weekCount }, (_, i) => {
+    const start = i * 7 + 1;
+    const end = Math.min((i + 1) * 7, days);
+    return `${start}-${end} ${abbr}`;
   });
 }
 
@@ -86,8 +103,9 @@ export default async function Home({
     highlight: d.period === selected,
   }));
   const ranges = weekRanges(selected, weekly.length);
+  const rangesShort = weekRangesShort(selected, weekly.length);
   const weeklySeries: SeriesPoint[] = weekly.map((w, i) => ({
-    label: w.label,
+    label: rangesShort[i] ?? w.label,
     sub: ranges[i],
     ingresos: w.ingresos,
     egresos: w.egresos,
@@ -99,7 +117,6 @@ export default async function Home({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-ink">Bienvenido, Finanzas 👋</h1>
-          <p className="mt-1 text-sm text-ink-soft">Resumen gerencial del período {selected}.</p>
         </div>
         <DashboardPeriodSelect current={selected} />
       </div>
@@ -107,21 +124,20 @@ export default async function Home({
       {/* Fila superior: KPIs (izquierda, 2×2) + Gráfico Ingresos vs Egresos (derecha) */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="grid min-w-0 grid-cols-2 grid-rows-2 gap-4">
-          <Kpi tone="primary" icon={<TrendingUp className="h-4 w-4" />} label="Total ingresos" big={moneyShort(totalIngresos)} sub={money(totalIngresos)} />
-          <Kpi tone="error" icon={<TrendingDown className="h-4 w-4" />} label="Total egresos" big={moneyShort(totalEgresos)} sub={money(totalEgresos)} />
-          <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Recaudo / Ingreso" big={`${pctRecaudo}%`} sub={`${moneyShort(recaudoConc)} conciliado`} bar={pctRecaudo} />
-          <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Pagado (Cartera)" big={`${pctPagado.toFixed(1)}%`} sub={`${moneyShort(cartera.pagado)} de ${moneyShort(cartera.valorFacturado)}`} bar={pctPagado} />
+          <Kpi icon={<TrendingUp className="h-4 w-4" />} label="Total ingresos" big={money(totalIngresos)} />
+          <Kpi icon={<TrendingDown className="h-4 w-4" />} label="Total egresos" big={money(totalEgresos)} />
+          <Kpi icon={<Percent className="h-4 w-4" />} label="% Recaudo / Ingreso" big={`${pctRecaudo}%`} sub={`${moneyShort(recaudoConc)} conciliado`} bar={pctRecaudo} />
+          <Kpi icon={<Percent className="h-4 w-4" />} label="% Pagado (Cartera)" big={`${pctPagado.toFixed(1)}%`} sub="de lo facturado" bar={pctPagado} />
         </div>
         <div className="min-w-0">
           <IngresosEgresosChart monthly={monthly} weekly={weeklySeries} />
         </div>
       </div>
 
-      {/* Tabla de cuentas bancarias (ancho completo): saldos + estado de conciliación */}
-      <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold">Cuentas bancarias — {selected}</h2>
-        <p className="mt-0.5 text-xs text-ink-soft">Saldos del mes y estado de conciliación por cuenta.</p>
-        <div className="mt-4 overflow-x-auto">
+      {/* Detalle por cuentas bancarias */}
+      <h2 className="mt-8 text-lg font-bold">Detalle por Cuentas Bancarias</h2>
+      <div className="mt-3 rounded-xl border border-line bg-white p-5 shadow-sm">
+        <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
@@ -183,11 +199,10 @@ export default async function Home({
         </div>
       </div>
 
-      {/* Cartera 360 del período */}
-      <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold">Cartera 360 — {selected}</h2>
-        <p className="mt-0.5 text-xs text-ink-soft">Estado de facturas del período.</p>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* Detalle recaudo (cartera) */}
+      <h2 className="mt-8 text-lg font-bold">Detalle Recaudo — {selected}</h2>
+      <div className="mt-3 rounded-xl border border-line bg-white p-5 shadow-sm">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Mini icon={<FileText className="h-4 w-4 text-primary" />} label="Total facturado" value={money(cartera.valorFacturado)} />
           <Mini icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Valor pagado" value={money(cartera.pagado)} />
           <Mini icon={<Clock className="h-4 w-4 text-warning" />} label="Pendiente de pago" value={money(cartera.valorPendiente)} />
@@ -217,22 +232,13 @@ function EstadoBadge({ estado }: { estado: string }) {
   return <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft">Sin datos</span>;
 }
 
-const TONE: Record<string, string> = {
-  primary: "text-primary",
-  ok: "text-success",
-  error: "text-error",
-  warn: "text-warning",
-};
-
 function Kpi({
-  tone,
   icon,
   label,
   big,
   sub,
   bar,
 }: {
-  tone: keyof typeof TONE | string;
   icon: React.ReactNode;
   label: string;
   big: string;
@@ -242,14 +248,14 @@ function Kpi({
   return (
     <div className="flex h-full flex-col justify-center rounded-xl border border-line bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-medium text-ink-soft">
-        <span className={TONE[tone] ?? "text-ink-soft"}>{icon}</span>
+        <span className="text-primary">{icon}</span>
         {label}
       </div>
-      <div className={`mt-2 text-2xl font-bold tabular-nums ${TONE[tone] ?? "text-ink"}`}>{big}</div>
+      <div className="mt-2 text-xl font-bold tabular-nums text-ink">{big}</div>
       {sub && <div className="mt-1 truncate text-xs text-ink-soft">{sub}</div>}
       {bar != null && (
         <div className="mt-2 h-1.5 overflow-hidden rounded bg-line">
-          <div className="h-full bg-success" style={{ width: `${Math.min(100, bar)}%` }} />
+          <div className="h-full bg-primary" style={{ width: `${Math.min(100, bar)}%` }} />
         </div>
       )}
     </div>
