@@ -115,8 +115,13 @@ export default async function Home({
     <div className="mx-auto max-w-7xl">
       {/* Encabezado + selector de período */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Bienvenido, Finanzas 👋</h1>
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-bold text-ink">Bienvenidos a la Torre de Control de Finanzas 👋</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Aquí encuentras el detalle de <b className="font-medium text-ink">ingresos vs egresos</b> de las cuentas
+            bancarias de la compañía, y el detalle de <b className="font-medium text-ink">Cartera</b> — la facturación
+            de la compañía con su respectivo recaudo.
+          </p>
         </div>
         <DashboardPeriodSelect current={selected} />
       </div>

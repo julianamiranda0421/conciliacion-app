@@ -3,10 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Scale, Zap, Wallet, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, Scale, Zap, Wallet, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 const NAV = [
-  { href: "/", label: "Inicio", icon: Home },
+  { href: "/", label: "Torre de Control", icon: LayoutDashboard },
   { href: "/cartera", label: "Cartera 360", icon: Wallet },
   { href: "/conciliaciones", label: "Conciliaciones", icon: Scale },
 ];
