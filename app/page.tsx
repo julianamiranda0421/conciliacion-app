@@ -173,12 +173,12 @@ export default async function Home({
                         <span className="font-medium">{accountLabel(a.id)}</span>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right tabular-nums text-ink-soft" title={saldoIni != null ? money(saldoIni) : undefined}>
-                      {saldoIni != null ? moneyShort(saldoIni) : "—"}
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums text-ink-soft">
+                      {saldoIni != null ? money(saldoIni) : "—"}
                     </td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right tabular-nums" title={money(ingresos)}>{moneyShort(ingresos)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right tabular-nums" title={money(egresos)}>{moneyShort(egresos)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-semibold tabular-nums" title={money(saldoAct)}>{moneyShort(saldoAct)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums">{money(ingresos)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right tabular-nums">{money(egresos)}</td>
+                    <td className="whitespace-nowrap border-b border-line px-3.5 py-3 text-right font-semibold tabular-nums">{money(saldoAct)}</td>
                     <td className="whitespace-nowrap border-b border-line px-3.5 py-3">
                       <div className="flex items-center justify-center gap-2">
                         <EstadoBadge estado={estado} />
