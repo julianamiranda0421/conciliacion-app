@@ -104,21 +104,24 @@ export default async function Home({
         <DashboardPeriodSelect current={selected} />
       </div>
 
-      {/* KPIs hero */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi tone="primary" icon={<TrendingUp className="h-4 w-4" />} label="Total ingresos" big={moneyShort(totalIngresos)} sub={money(totalIngresos)} />
-        <Kpi tone="error" icon={<TrendingDown className="h-4 w-4" />} label="Total egresos" big={moneyShort(totalEgresos)} sub={money(totalEgresos)} />
-        <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Recaudo / Ingreso" big={`${pctRecaudo}%`} sub={`${moneyShort(recaudoConc)} conciliado`} bar={pctRecaudo} />
-        <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Pagado (Cartera)" big={`${pctPagado.toFixed(1)}%`} sub={`${moneyShort(cartera.pagado)} de ${moneyShort(cartera.valorFacturado)}`} bar={pctPagado} />
+      {/* Fila superior: KPIs (izquierda, 2×2) + Gráfico Ingresos vs Egresos (derecha) */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-2 grid-rows-2 gap-4">
+          <Kpi tone="primary" icon={<TrendingUp className="h-4 w-4" />} label="Total ingresos" big={moneyShort(totalIngresos)} sub={money(totalIngresos)} />
+          <Kpi tone="error" icon={<TrendingDown className="h-4 w-4" />} label="Total egresos" big={moneyShort(totalEgresos)} sub={money(totalEgresos)} />
+          <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Recaudo / Ingreso" big={`${pctRecaudo}%`} sub={`${moneyShort(recaudoConc)} conciliado`} bar={pctRecaudo} />
+          <Kpi tone="ok" icon={<Percent className="h-4 w-4" />} label="% Pagado (Cartera)" big={`${pctPagado.toFixed(1)}%`} sub={`${moneyShort(cartera.pagado)} de ${moneyShort(cartera.valorFacturado)}`} bar={pctPagado} />
+        </div>
+        <div className="min-w-0">
+          <IngresosEgresosChart monthly={monthly} weekly={weeklySeries} />
+        </div>
       </div>
 
-      {/* Cuentas (izquierda) + Gráfico (derecha), lado a lado */}
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-5">
-      {/* Tabla de cuentas bancarias: saldos + estado de conciliación */}
-      <div className="rounded-xl border border-line bg-white p-5 shadow-sm lg:col-span-3">
+      {/* Tabla de cuentas bancarias (ancho completo): saldos + estado de conciliación */}
+      <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold">Cuentas bancarias — {selected}</h2>
         <p className="mt-0.5 text-xs text-ink-soft">Saldos del mes y estado de conciliación por cuenta.</p>
-        <div className="mt-4">
+        <div className="mt-4 overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
@@ -180,12 +183,6 @@ export default async function Home({
         </div>
       </div>
 
-      {/* Gráfico Ingresos vs Egresos (columna derecha) */}
-      <div className="lg:col-span-2">
-        <IngresosEgresosChart monthly={monthly} weekly={weeklySeries} />
-      </div>
-      </div>
-
       {/* Cartera 360 del período */}
       <div className="mt-6 rounded-xl border border-line bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold">Cartera 360 — {selected}</h2>
@@ -243,7 +240,7 @@ function Kpi({
   bar?: number;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
+    <div className="flex h-full flex-col justify-center rounded-xl border border-line bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-medium text-ink-soft">
         <span className={TONE[tone] ?? "text-ink-soft"}>{icon}</span>
         {label}
